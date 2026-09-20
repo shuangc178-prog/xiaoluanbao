@@ -1,0 +1,92 @@
+{
+  "id": "rest_001_sleepy_cat",
+  "name": "小憩的月亮与云",
+  "displayName": "休息卡",
+  "series": "休息卡",
+  "status": "final",
+  "rarity": null,
+    "rarityNote": "休息卡没有稀有度——它是功能卡（奖励/兑换物），不是抽卡系列里的收集卡；作为整套兑换奖励时仍不需要稀有度档位。",
+
+  "art": {
+    "full": {
+      "file": "card_full.png",
+      "width": 930,
+      "height": 1330,
+      "aspectRatio": 0.6992,
+      "aspectRatioExact": "930/1330",
+      "bytes": 134912,
+      "sha256_16": "c39c17ea9dd60ab2",
+      "pngColorType": "palette(3)",
+      "drawable": "rest_card_full",
+      "usage": "整卡卡面：橙描边 + 卡名 + 「可跳过 1 次打卡」文案都已画在图里，代码不要再复述一遍"
+    },
+    "chip": {
+      "file": "card_chip.png",
+      "width": 930,
+      "height": 732,
+      "aspectRatio": 1.2705,
+      "aspectRatioExact": "930/732",
+      "bytes": 74167,
+      "sha256_16": "f65716bcc1166d60",
+      "pngColorType": "palette(3)",
+      "drawable": "rest_card_chip",
+      "usage": "只截插画区：卡槽 / 列表里的小卡面用它，整卡缩到 52–68dp 时文字会糊"
+    },
+    "source": {
+      "note": "未压缩的裁切源图留在 ../../../rest-card/（卡库不复制，避免同一张图存三份）",
+      "full": "../../../rest-card/crop-full.png",
+      "chip": "../../../rest-card/crop-chip.png"
+    },
+    "packaged": {
+      "note": "已打包进 APK 的那一份，与本目录文件内容一致（改图要走 ../../sync_cards.py 的三步）",
+      "full": "app/src/main/res/drawable-nodpi/rest_card_full.png",
+      "chip": "app/src/main/res/drawable-nodpi/rest_card_chip.png"
+    }
+  },
+
+  "acquire": {
+    "type": "streak",
+    "streakDays": 5,
+    "constant": "REST_CARD_STREAK_DAYS",
+    "note": "每连续【真实】打卡满 5 天发一张（第 5、10、15… 天到手）。用卡补出来的天不算真实打卡，不喂养奖励进度。发卡是纯推导、不落库（earnedRestCards / restCardStreakProgress）。",
+    "additionalSources": [
+      {
+        "type": "gacha",
+        "status": "active",
+        "note": "任一抽卡系列集齐五种后，可清空该系列全部卡片并兑换 2 张休息卡。"
+      }
+    ]
+  },
+
+  "effect": {
+    "type": "skip_check_in",
+    "skipDays": 1,
+    "repeatable": true,
+    "note": "给漏掉的某一天补记打卡。补记写入的起止时刻取历史【真实】记录的平均值（averageCheckInTimes），没有历史时兜底 09:00–17:00。补出来的那天计入累计天数，但不计入连续天数、也不喂养休息卡进度。"
+  },
+
+  "motion": {
+    "revealTotalMillis": 2000,
+    "beats": [
+      { "name": "落暗", "atMillis": 0, "durationMillis": 260, "detail": "背景压到 62% 黑（LinearOutSlowInEasing）" },
+      { "name": "浮现", "atMillis": 180, "durationMillis": 320, "detail": "卡面 alpha 0→1（线性）+ 缩放 0.86→1（spring medium bouncy / StiffnessLow）" },
+      { "name": "成形", "atMillis": 300, "durationMillis": 520, "detail": "图从卡里长出来（FastOutSlowInEasing）" },
+      { "name": "柔光", "atMillis": 420, "durationMillis": 1400, "detail": "背后柔光呼吸一次 0.35→1→0.55 后静止" }
+    ],
+    "settleMillis": 260,
+    "settleDetail": "图自身 1.04→1.00 的收束（线性），让卡面「落定」",
+    "useMillis": 700,
+    "dismiss": "点「收下」/ 点背景 / 返回键，三个出口都不逼用户等动画放完",
+    "note": "实现见 RestCardReveal.kt / RestCardArt.kt；参数改这里也要改那边"
+  },
+
+  "cues": {
+    "light": "米色底 + 橙色描边，跟着 Claude 浅色主题；卡面是 nodpi 像素画，不随密度缩放",
+    "dark": "同一张图直接用在暗色主题下（素材自带米底，不需要额外底色，加底色会把描边糊掉）"
+  },
+
+  "notes": [
+    "形象：一只蜷着睡的猫、月亮、云与「Z」。美术资产由用户提供，代码只负责呈现与动效，不自己画造型。",
+    "休息卡系列目前只有这一张定稿。卡库的目录与字段规范见 ../../README.md（同库还有「异世界之旅」系列 5 张收集卡）。"
+  ]
+}

@@ -1,0 +1,425 @@
+{
+  "schemaVersion": 3,
+  "updatedAt": "2026-09-20",
+  "note": "由 .workbuddy/cards/sync_cards.py 生成，不要手改。这里 art 只留文件名，图片本体不在 assets：已打包的卡走 res/drawable-nodpi（见 drawables 字段），未打包的卡图片留在 .workbuddy/cards/ 里。",
+  "rarityLadder": [
+    "R",
+    "SR",
+    "SSR",
+    "SSSR",
+    "XR"
+  ],
+  "rarityLadderNote": "照设计稿的写法：第三档是 SSSR、最高档是 XR，都没有用 UR；不要顺手改成常见写法。休息卡是功能卡，没有稀有度。",
+  "series": [
+    {
+      "id": "rest",
+      "name": "休息卡",
+      "kind": "functional",
+      "note": "功能卡：给漏掉的一天补记打卡。不是收集卡，不参与稀有度。",
+      "packaged": true,
+      "cards": [
+        {
+          "id": "rest_001_sleepy_cat",
+          "name": "小憩的月亮与云",
+          "displayName": "休息卡",
+          "status": "final",
+          "rarity": null,
+          "effect": {
+            "type": "skip_check_in",
+            "skipDays": 1
+          },
+          "acquire": {
+            "type": "streak",
+            "streakDays": 5
+          },
+          "art": {
+            "full": "card_full.png",
+            "chip": "card_chip.png",
+            "aspectRatioFull": 0.6992,
+            "aspectRatioChip": 1.2705,
+            "prepared": {
+              "file": "rest_card_full.png",
+              "width": 930,
+              "height": 1330,
+              "aspectRatio": 0.6992,
+              "bytes": 134912
+            }
+          },
+          "drawables": {
+            "full": "rest_card_full",
+            "chip": "rest_card_chip"
+          },
+          "detail": "rest/rest_001_sleepy_cat/meta.json",
+          "prepare": false
+        }
+      ]
+    },
+    {
+      "id": "isekai",
+      "name": "异世界之旅",
+      "kind": "collectible",
+      "note": "第一弹收集卡，一套 5 张，每张插画里都有 App 的橙色像素主角「小卵包」出场。",
+      "packaged": true,
+      "cards": [
+        {
+          "id": "isekai_001_unicorn",
+          "name": "独角兽",
+          "status": "final",
+          "rarity": "R",
+          "effect": null,
+          "acquire": {
+            "type": "gacha",
+            "status": "active"
+          },
+          "art": {
+            "full": "card_full.jpg",
+            "chip": null,
+            "aspectRatioFull": 0.75,
+            "packaged": "app/src/main/res/drawable-nodpi/isekai_001_unicorn.png",
+            "prepared": {
+              "file": "isekai_001_unicorn.png",
+              "width": 911,
+              "height": 1352,
+              "aspectRatio": 0.6738,
+              "bytes": 167464
+            }
+          },
+          "drawables": {
+            "full": "isekai_001_unicorn",
+            "chip": null
+          },
+          "detail": "isekai/isekai_001_unicorn/meta.json",
+          "prepare": true
+        },
+        {
+          "id": "isekai_002_elf_king",
+          "name": "精灵王",
+          "status": "final",
+          "rarity": "SR",
+          "effect": null,
+          "acquire": {
+            "type": "gacha",
+            "status": "active"
+          },
+          "art": {
+            "full": "card_full.jpg",
+            "chip": null,
+            "aspectRatioFull": 0.75,
+            "packaged": "app/src/main/res/drawable-nodpi/isekai_002_elf_king.png",
+            "prepared": {
+              "file": "isekai_002_elf_king.png",
+              "width": 918,
+              "height": 1358,
+              "aspectRatio": 0.676,
+              "bytes": 294899
+            }
+          },
+          "drawables": {
+            "full": "isekai_002_elf_king",
+            "chip": null
+          },
+          "detail": "isekai/isekai_002_elf_king/meta.json",
+          "prepare": true
+        },
+        {
+          "id": "isekai_003_hero",
+          "name": "勇者",
+          "status": "final",
+          "rarity": "SSR",
+          "effect": null,
+          "acquire": {
+            "type": "gacha",
+            "status": "active"
+          },
+          "art": {
+            "full": "card_full.jpg",
+            "chip": null,
+            "aspectRatioFull": 0.75,
+            "packaged": "app/src/main/res/drawable-nodpi/isekai_003_hero.png",
+            "prepared": {
+              "file": "isekai_003_hero.png",
+              "width": 918,
+              "height": 1357,
+              "aspectRatio": 0.6765,
+              "bytes": 198310
+            }
+          },
+          "drawables": {
+            "full": "isekai_003_hero",
+            "chip": null
+          },
+          "detail": "isekai/isekai_003_hero/meta.json",
+          "prepare": true
+        },
+        {
+          "id": "isekai_004_black_mage",
+          "name": "黑魔法师",
+          "status": "final",
+          "rarity": "SSSR",
+          "effect": null,
+          "acquire": {
+            "type": "gacha",
+            "status": "active"
+          },
+          "art": {
+            "full": "card_full.jpg",
+            "chip": null,
+            "aspectRatioFull": 0.75,
+            "packaged": "app/src/main/res/drawable-nodpi/isekai_004_black_mage.png",
+            "prepared": {
+              "file": "isekai_004_black_mage.png",
+              "width": 915,
+              "height": 1336,
+              "aspectRatio": 0.6849,
+              "bytes": 316920
+            }
+          },
+          "drawables": {
+            "full": "isekai_004_black_mage",
+            "chip": null
+          },
+          "detail": "isekai/isekai_004_black_mage/meta.json",
+          "prepare": true
+        },
+        {
+          "id": "isekai_005_ancient_dragon",
+          "name": "古龙",
+          "status": "final",
+          "rarity": "XR",
+          "effect": null,
+          "acquire": {
+            "type": "gacha",
+            "status": "active"
+          },
+          "art": {
+            "full": "card_full.jpg",
+            "chip": null,
+            "aspectRatioFull": 0.75,
+            "packaged": "app/src/main/res/drawable-nodpi/isekai_005_ancient_dragon.png",
+            "prepared": {
+              "file": "isekai_005_ancient_dragon.png",
+              "width": 920,
+              "height": 1363,
+              "aspectRatio": 0.675,
+              "bytes": 314042
+            }
+          },
+          "drawables": {
+            "full": "isekai_005_ancient_dragon",
+            "chip": null
+          },
+          "detail": "isekai/isekai_005_ancient_dragon/meta.json",
+          "prepare": true
+        }
+      ],
+      "packagingNote": "这 5 张已通过 prepare_art.py 去背裁边并打包进 res/drawable-nodpi/，drawable 名与卡 id 同名。"
+    },
+    {
+      "id": "sanguo",
+      "name": "三国演义",
+      "kind": "collectible",
+      "note": "第二弹收集卡，一套 5 张；用户重复提供的长坂孤骑经 SHA-256 核对为同一文件，只登记一次。",
+      "packaged": true,
+      "cards": [
+        {
+          "id": "sanguo_001_taoyuan_r",
+          "name": "桃园结义",
+          "status": "final",
+          "rarity": "R",
+          "effect": null,
+          "acquire": {
+            "type": "gacha",
+            "status": "active"
+          },
+          "art": {
+            "full": "sanguo_001_taoyuan_r.png",
+            "chip": null,
+            "aspectRatioFull": 0.6745,
+            "packaged": "app/src/main/res/drawable-nodpi/sanguo_001_taoyuan_r.png",
+            "prepared": {
+              "file": "sanguo_001_taoyuan_r.png",
+              "width": 1000,
+              "height": 1511,
+              "aspectRatio": 0.6618,
+              "bytes": 395086
+            }
+          },
+          "drawables": {
+            "full": "sanguo_001_taoyuan_r",
+            "chip": null
+          },
+          "prepare": true
+        },
+        {
+          "id": "sanguo_002_changban_sr",
+          "name": "长坂孤骑",
+          "status": "final",
+          "rarity": "SR",
+          "effect": null,
+          "acquire": {
+            "type": "gacha",
+            "status": "active"
+          },
+          "art": {
+            "full": "sanguo_002_changban_sr.png",
+            "chip": null,
+            "aspectRatioFull": 0.675,
+            "packaged": "app/src/main/res/drawable-nodpi/sanguo_002_changban_sr.png",
+            "prepared": {
+              "file": "sanguo_002_changban_sr.png",
+              "width": 1030,
+              "height": 1526,
+              "aspectRatio": 0.675,
+              "bytes": 469712
+            }
+          },
+          "drawables": {
+            "full": "sanguo_002_changban_sr",
+            "chip": null
+          },
+          "prepare": true
+        },
+        {
+          "id": "sanguo_003_kongcheng_ssr",
+          "name": "空城绝响",
+          "status": "final",
+          "rarity": "SSR",
+          "effect": null,
+          "acquire": {
+            "type": "gacha",
+            "status": "active"
+          },
+          "art": {
+            "full": "sanguo_003_kongcheng_ssr.png",
+            "chip": null,
+            "aspectRatioFull": 0.675,
+            "packaged": "app/src/main/res/drawable-nodpi/sanguo_003_kongcheng_ssr.png",
+            "prepared": {
+              "file": "sanguo_003_kongcheng_ssr.png",
+              "width": 1029,
+              "height": 1526,
+              "aspectRatio": 0.6743,
+              "bytes": 381271
+            }
+          },
+          "drawables": {
+            "full": "sanguo_003_kongcheng_ssr",
+            "chip": null
+          },
+          "prepare": true
+        },
+        {
+          "id": "sanguo_004_chibi_sssr",
+          "name": "赤壁焚天",
+          "status": "final",
+          "rarity": "SSSR",
+          "effect": null,
+          "acquire": {
+            "type": "gacha",
+            "status": "active"
+          },
+          "art": {
+            "full": "sanguo_004_chibi_sssr.png",
+            "chip": null,
+            "aspectRatioFull": 0.6745,
+            "packaged": "app/src/main/res/drawable-nodpi/sanguo_004_chibi_sssr.png",
+            "prepared": {
+              "file": "sanguo_004_chibi_sssr.png",
+              "width": 1029,
+              "height": 1515,
+              "aspectRatio": 0.6792,
+              "bytes": 487006
+            }
+          },
+          "drawables": {
+            "full": "sanguo_004_chibi_sssr",
+            "chip": null
+          },
+          "prepare": true
+        },
+        {
+          "id": "sanguo_005_tianxia_xr",
+          "name": "天下三分",
+          "status": "final",
+          "rarity": "XR",
+          "effect": null,
+          "acquire": {
+            "type": "gacha",
+            "status": "active"
+          },
+          "art": {
+            "full": "sanguo_005_tianxia_xr.png",
+            "chip": null,
+            "aspectRatioFull": 0.6745,
+            "packaged": "app/src/main/res/drawable-nodpi/sanguo_005_tianxia_xr.png",
+            "prepared": {
+              "file": "sanguo_005_tianxia_xr.png",
+              "width": 1030,
+              "height": 1527,
+              "aspectRatio": 0.6745,
+              "bytes": 508986
+            }
+          },
+          "drawables": {
+            "full": "sanguo_005_tianxia_xr",
+            "chip": null
+          },
+          "prepare": true
+        }
+      ],
+      "packagingNote": "5 张透明 PNG 量化后打包进 drawable-nodpi，drawable 名与卡 id 同名。"
+    }
+  ],
+  "candidates": [
+    {
+      "series": "休息卡",
+      "name": "灯下蜷着的一团",
+      "status": "proposal",
+      "art": "../rest-card/rest-card-proposals.html",
+      "note": "候选形象，未采用；目前只有 HTML 里的矢量稿，没有出成品图"
+    },
+    {
+      "series": "休息卡",
+      "name": "小夜灯",
+      "status": "proposal",
+      "art": "../rest-card/rest-card-proposals.html",
+      "note": "候选形象，未采用；目前只有 HTML 里的矢量稿，没有出成品图"
+    }
+  ],
+  "pending": [
+    "两弹收集卡的具体效果仍未定义",
+    "保底、抽卡货币与后续重复卡策略仍待产品决定",
+    "收集卡的 chip 缩略图尚未单独裁切"
+  ],
+  "gacha": {
+    "covers": [
+      {
+        "series": "isekai",
+        "source": "isekai/cover.jpg",
+        "drawable": "gacha_cover",
+        "width": 1148,
+        "height": 1370,
+        "note": "第一弹封面；标题与副题已经画在图里，代码不要复述。"
+      },
+      {
+        "series": "sanguo",
+        "source": "sanguo/cover.png",
+        "drawable": "gacha_cover_sanguo",
+        "width": 1148,
+        "height": 1370,
+        "note": "第二弹封面；标题与副题已经画在图里，代码不要复述。"
+      }
+    ],
+    "rules": {
+      "drawsPerDay": 1,
+      "drawsScopedBySeries": false,
+      "requiresCheckIn": true,
+      "maxCopiesPerCard": 2,
+      "exchangeSetSize": 5,
+      "exchangeRewardRestCards": 2,
+      "note": "卡册与兑换资格按弹分别计算，每日抽卡机会由所有已上线弹共享；实际规则以 data/card/GachaRule.kt 为准。"
+    }
+  },
+  "generatedBy": "sync_cards.py",
+  "sourceOfTruth": ".workbuddy/cards/cards.json"
+}

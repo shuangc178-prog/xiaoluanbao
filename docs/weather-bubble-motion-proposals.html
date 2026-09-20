@@ -1,0 +1,1199 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>天气气泡动效提案 - 小米场景方向</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --page: light-dark(#faf9f5, #30302e);
+      --surface: light-dark(#ffffff, #3d3d3a);
+      --surface-subtle: light-dark(#f5f4ed, #363634);
+      --ink: light-dark(#141413, #faf9f5);
+      --muted: light-dark(#73726c, #c2c0b6);
+      --border: light-dark(rgba(20, 20, 19, .15), rgba(250, 249, 245, .15));
+      --accent: light-dark(#c6613f, #e58c6c);
+      --accent-soft: light-dark(#f8ece8, #59473f);
+      --selected-ink: light-dark(#ffffff, #30302e);
+      font-family: Inter, "Noto Sans SC", "Microsoft YaHei", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: var(--page);
+      color: var(--ink);
+    }
+
+    button {
+      font: inherit;
+    }
+
+    .lab {
+      width: min(1080px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 32px 0 48px;
+    }
+
+    .masthead {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 20px;
+      padding-bottom: 22px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .eyebrow,
+    .section-kicker,
+    .option-number,
+    .bubble-location {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0;
+    }
+
+    h1,
+    h2,
+    h3 {
+      letter-spacing: 0;
+    }
+
+    h1 {
+      margin-bottom: 6px;
+      font-family: Georgia, "Noto Serif SC", serif;
+      font-size: 28px;
+      font-weight: 500;
+      line-height: 1.2;
+    }
+
+    .intro {
+      max-width: 620px;
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .native-size {
+      flex: 0 0 auto;
+      padding: 7px 9px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .weather-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 22px 0 4px;
+    }
+
+    .weather-tab,
+    .motion-option,
+    .icon-button {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: transparent;
+      color: var(--ink);
+      cursor: pointer;
+      transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, transform 180ms ease;
+    }
+
+    .weather-tab {
+      min-height: 34px;
+      padding: 6px 11px;
+      font-size: 13px;
+    }
+
+    .weather-tab:hover,
+    .motion-option:hover,
+    .icon-button:hover {
+      border-color: var(--accent);
+    }
+
+    .weather-tab[aria-selected="true"] {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: var(--selected-ink);
+    }
+
+    .selection {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(240px, 360px);
+      gap: 32px;
+      padding: 28px 0 30px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .preview-header,
+    .choice-header {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
+
+    h2 {
+      margin-bottom: 0;
+      font-size: 18px;
+      font-weight: 500;
+      line-height: 1.3;
+    }
+
+    .motion-name {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .icon-button {
+      min-width: 36px;
+      min-height: 34px;
+      padding: 5px 10px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .icon-button[aria-pressed="true"] {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .stage {
+      position: relative;
+      width: min(100%, 416px);
+      margin: 0 auto;
+    }
+
+    .weather-bubble {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      overflow: hidden;
+      border-radius: 14px;
+      box-shadow: 0 8px 22px rgba(20, 20, 19, .16);
+      isolation: isolate;
+    }
+
+    .weather-bubble canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .bubble-copy {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 11px 12px 10px;
+      color: #ffffff;
+      pointer-events: none;
+      text-shadow: 0 1px 8px rgba(10, 20, 32, .25);
+    }
+
+    .bubble-heading {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .bubble-location {
+      color: rgba(255, 255, 255, .82);
+    }
+
+    .bubble-condition {
+      margin: 2px 0 0;
+      font-size: 13px;
+      line-height: 1.25;
+    }
+
+    .weather-glyph {
+      width: 24px;
+      height: 24px;
+      border: 2px solid rgba(255, 255, 255, .9);
+      border-radius: 50%;
+      opacity: .9;
+    }
+
+    .bubble-temperature {
+      margin: 0;
+      font-size: 42px;
+      font-weight: 300;
+      line-height: .9;
+    }
+
+    .actual-scale {
+      position: absolute;
+      right: 0;
+      bottom: -22px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .choice-area {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .choice-copy {
+      margin: 5px 0 18px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .motion-options {
+      display: grid;
+      gap: 10px;
+    }
+
+    .motion-option {
+      display: grid;
+      grid-template-columns: 48px minmax(0, 1fr);
+      gap: 12px;
+      align-items: center;
+      width: 100%;
+      padding: 10px;
+      text-align: left;
+    }
+
+    .motion-option[aria-pressed="true"] {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    .option-canvas {
+      width: 48px;
+      height: 36px;
+      overflow: hidden;
+      border-radius: 5px;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .2);
+    }
+
+    .option-canvas canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .option-name {
+      margin: 2px 0 0;
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .option-detail {
+      margin: 2px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .catalog {
+      padding-top: 30px;
+    }
+
+    .catalog-heading {
+      margin-bottom: 16px;
+    }
+
+    .catalog-heading p {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .catalog-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 18px 14px;
+    }
+
+    .catalog-group {
+      min-width: 0;
+    }
+
+    .catalog-group h3 {
+      margin-bottom: 8px;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .catalog-row {
+      display: flex;
+      gap: 5px;
+    }
+
+    .catalog-swatch {
+      flex: 1 1 0;
+      min-width: 0;
+      padding: 0;
+      overflow: hidden;
+      border: 0;
+      border-radius: 4px;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .catalog-swatch canvas {
+      display: block;
+      width: 100%;
+      aspect-ratio: 4 / 3;
+    }
+
+    .catalog-swatch:hover,
+    .catalog-swatch:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .decision {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-top: 30px;
+      padding: 14px 16px;
+      border-radius: 6px;
+      background: var(--surface-subtle);
+    }
+
+    .decision p {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .decision-label {
+      color: var(--muted);
+    }
+
+    .decision-value {
+      margin-left: 8px;
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    .copy-choice {
+      flex: 0 0 auto;
+      min-height: 34px;
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--ink);
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .copy-choice:hover {
+      border-color: var(--accent);
+    }
+
+    .copy-status {
+      min-height: 18px;
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      text-align: right;
+    }
+
+    @media (max-width: 760px) {
+      .lab {
+        width: min(100% - 24px, 560px);
+        padding-top: 22px;
+      }
+
+      .masthead,
+      .selection,
+      .decision {
+        display: block;
+      }
+
+      .native-size {
+        display: inline-block;
+        margin-top: 14px;
+      }
+
+      .selection {
+        padding-top: 22px;
+      }
+
+      .choice-area {
+        margin-top: 42px;
+      }
+
+      .catalog-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 20px 14px;
+      }
+
+      .copy-choice {
+        margin-top: 12px;
+      }
+
+      .copy-status {
+        text-align: left;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .weather-tab,
+      .motion-option,
+      .icon-button {
+        transition: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="lab">
+    <header class="masthead">
+      <div>
+        <p class="eyebrow">CampusLife / Xiaomi-style weather study</p>
+        <h1>天气气泡动效提案 · 场景方向</h1>
+        <p class="intro">主要参考小米天气的环境化呈现：天空、远景与地表共同传达天气，文字始终保持清晰。先选天气，再从三个场景动效中挑一个。</p>
+      </div>
+      <div class="native-size">实际组件：128 × 96dp</div>
+    </header>
+
+    <nav class="weather-tabs" id="weatherTabs" aria-label="天气类别"></nav>
+
+    <section class="selection" aria-labelledby="selectedTitle">
+      <div>
+        <div class="preview-header">
+          <div>
+            <p class="section-kicker">放大预览</p>
+            <h2 id="selectedTitle">晴</h2>
+            <p class="motion-name" id="selectedMotion"></p>
+          </div>
+          <button class="icon-button" id="pauseButton" type="button" aria-pressed="false">暂停</button>
+        </div>
+        <div class="stage">
+          <div class="weather-bubble" aria-label="当前天气气泡预览">
+            <canvas id="heroCanvas" width="832" height="624"></canvas>
+            <div class="bubble-copy" aria-hidden="true">
+              <div class="bubble-heading">
+                <div>
+                  <p class="bubble-location">当前位置</p>
+                  <p class="bubble-condition" id="heroCondition">晴</p>
+                </div>
+                <span class="weather-glyph"></span>
+              </div>
+              <p class="bubble-temperature" id="heroTemperature">24°</p>
+            </div>
+          </div>
+          <span class="actual-scale">放大 3.25× 预览</span>
+        </div>
+      </div>
+
+      <div class="choice-area">
+        <div class="choice-header">
+          <div>
+            <p class="section-kicker">选择方案</p>
+            <h2>三种动态方向</h2>
+          </div>
+        </div>
+        <p class="choice-copy" id="choiceCopy"></p>
+        <div class="motion-options" id="motionOptions"></div>
+      </div>
+    </section>
+
+    <section class="catalog" aria-labelledby="catalogTitle">
+      <div class="catalog-heading">
+        <p class="section-kicker">全量一览</p>
+        <h2 id="catalogTitle">八类天气，共二十四种动效</h2>
+        <p>每个缩略气泡都可点选，跳回上方放大查看。</p>
+      </div>
+      <div class="catalog-grid" id="catalogGrid"></div>
+    </section>
+
+    <footer class="decision">
+      <p><span class="decision-label">当前选择</span><span class="decision-value" id="decisionValue">晴 · 方案一：晨光晴空</span></p>
+      <button class="copy-choice" id="copyChoice" type="button">复制选择</button>
+      <p class="copy-status" id="copyStatus" aria-live="polite"></p>
+    </footer>
+  </main>
+
+  <script>
+    (function () {
+      "use strict";
+
+      var WEATHER = [
+        {
+          id: "sunny",
+          label: "晴",
+          temperature: "24°",
+          description: "天空与远山是主角，日光只做柔和的环境层。",
+          options: [
+            ["晨光晴空", "日轮越过低处远山，光晕很轻"],
+            ["光穿薄云", "薄云缓过，留下斜向天光"],
+            ["午后微风", "晴空下的高云与远景慢移"]
+          ]
+        },
+        {
+          id: "night",
+          label: "晴夜",
+          temperature: "18°",
+          description: "深蓝天空配低反差夜景，避免暗色界面显得拥挤。",
+          options: [
+            ["静夜月光", "月轮停在远景上方，星点低频明灭"],
+            ["星轨夜空", "偶尔一条短流星从上方划过"],
+            ["夜雾掠过", "月下的淡雾贴着地表缓慢移动"]
+          ]
+        },
+        {
+          id: "cloudy",
+          label: "多云 / 阴",
+          temperature: "21°",
+          description: "用天空厚度和远近景的错位，表达多云与阴天。",
+          options: [
+            ["低云远山", "低云贴在远山上方缓慢平移"],
+            ["层云缓行", "前后云层以不同速度错开"],
+            ["云隙天光", "厚云间保留极弱的天空亮度"]
+          ]
+        },
+        {
+          id: "fog",
+          label: "雾",
+          temperature: "16°",
+          description: "通过低对比远景和横向雾带表达能见度降低。",
+          options: [
+            ["远景薄雾", "远山隐约可见，雾层整体移动"],
+            ["雾漫山线", "近远两层雾带反向穿行"],
+            ["近景流雾", "更贴近视角的低处雾流"]
+          ]
+        },
+        {
+          id: "drizzle",
+          label: "小雨",
+          temperature: "18°",
+          description: "细雨落在安静的地表场景中，不与大雨混淆。",
+          options: [
+            ["窗前细雨", "稀疏雨线落向低处街景"],
+            ["斜风小雨", "细雨被微风带出方向"],
+            ["水面微涟", "细雨与低处细小涟漪"]
+          ]
+        },
+        {
+          id: "rain",
+          label: "雨",
+          temperature: "14°",
+          description: "雨幕覆盖场景而非文字，保持 128 × 96dp 内的可读性。",
+          options: [
+            ["城市雨幕", "远处街景上方落下连续雨线"],
+            ["远近雨帘", "前后两层雨幕有明显速度差"],
+            ["玻璃水痕", "近处雨痕在画面边缘慢慢流下"]
+          ]
+        },
+        {
+          id: "snow",
+          label: "雪",
+          temperature: "-1°",
+          description: "冷色远山与低处积雪托住画面，雪花不抢文字。",
+          options: [
+            ["静雪远山", "雪花从远山上方慢慢落下"],
+            ["横风飘雪", "有风时的雪沿水平方向偏移"],
+            ["积雪微光", "低处积雪保留一点冷亮度"]
+          ]
+        },
+        {
+          id: "storm",
+          label: "雷雨",
+          temperature: "19°",
+          description: "厚云、雨幕与短暂电光共存，闪电不长期占据画面。",
+          options: [
+            ["远处雷暴", "城市远处的云后电光"],
+            ["云中闪电", "短促的两段折线闪电"],
+            ["压境风暴", "厚云、雨幕与边缘电光"]
+          ]
+        }
+      ];
+
+      var selectedWeather = 0;
+      var selectedOption = 0;
+      var paused = false;
+      var lastTime = 0;
+      var elapsed = 0;
+      var canvases = [];
+
+      var tabs = document.getElementById("weatherTabs");
+      var options = document.getElementById("motionOptions");
+      var catalog = document.getElementById("catalogGrid");
+      var heroCanvas = document.getElementById("heroCanvas");
+      var selectedTitle = document.getElementById("selectedTitle");
+      var selectedMotion = document.getElementById("selectedMotion");
+      var heroCondition = document.getElementById("heroCondition");
+      var heroTemperature = document.getElementById("heroTemperature");
+      var choiceCopy = document.getElementById("choiceCopy");
+      var decisionValue = document.getElementById("decisionValue");
+      var pauseButton = document.getElementById("pauseButton");
+      var copyButton = document.getElementById("copyChoice");
+      var copyStatus = document.getElementById("copyStatus");
+
+      function clearNode(node) {
+        while (node.firstChild) {
+          node.removeChild(node.firstChild);
+        }
+      }
+
+      function createCanvas(parent, weatherIndex, optionIndex, className) {
+        var canvas = document.createElement("canvas");
+        canvas.width = className === "option-canvas" ? 192 : 160;
+        canvas.height = className === "option-canvas" ? 144 : 120;
+        parent.appendChild(canvas);
+        canvases.push({
+          canvas: canvas,
+          weather: weatherIndex,
+          option: optionIndex
+        });
+        return canvas;
+      }
+
+      function renderTabs() {
+        clearNode(tabs);
+        WEATHER.forEach(function (weather, index) {
+          var button = document.createElement("button");
+          button.type = "button";
+          button.className = "weather-tab";
+          button.textContent = weather.label;
+          button.setAttribute("role", "tab");
+          button.setAttribute("aria-selected", String(index === selectedWeather));
+          button.addEventListener("click", function () {
+            selectedWeather = index;
+            selectedOption = 0;
+            render();
+          });
+          tabs.appendChild(button);
+        });
+      }
+
+      function renderOptions() {
+        clearNode(options);
+        canvases = canvases.filter(function (item) {
+          return item.canvas === heroCanvas || !options.contains(item.canvas);
+        });
+        var weather = WEATHER[selectedWeather];
+        weather.options.forEach(function (option, index) {
+          var button = document.createElement("button");
+          button.type = "button";
+          button.className = "motion-option";
+          button.setAttribute("aria-pressed", String(index === selectedOption));
+
+          var visual = document.createElement("span");
+          visual.className = "option-canvas";
+          createCanvas(visual, selectedWeather, index, "option-canvas");
+
+          var copy = document.createElement("span");
+          var number = document.createElement("span");
+          number.className = "option-number";
+          number.textContent = "方案 " + ["一", "二", "三"][index];
+          var name = document.createElement("span");
+          name.className = "option-name";
+          name.textContent = option[0];
+          var detail = document.createElement("span");
+          detail.className = "option-detail";
+          detail.textContent = option[1];
+          copy.appendChild(number);
+          copy.appendChild(name);
+          copy.appendChild(detail);
+
+          button.appendChild(visual);
+          button.appendChild(copy);
+          button.addEventListener("click", function () {
+            selectedOption = index;
+            render();
+          });
+          options.appendChild(button);
+        });
+      }
+
+      function renderCatalog() {
+        clearNode(catalog);
+        canvases = canvases.filter(function (item) {
+          return item.canvas === heroCanvas || !catalog.contains(item.canvas);
+        });
+        WEATHER.forEach(function (weather, weatherIndex) {
+          var group = document.createElement("section");
+          group.className = "catalog-group";
+          var heading = document.createElement("h3");
+          heading.textContent = weather.label;
+          group.appendChild(heading);
+
+          var row = document.createElement("div");
+          row.className = "catalog-row";
+          weather.options.forEach(function (option, optionIndex) {
+            var button = document.createElement("button");
+            button.type = "button";
+            button.className = "catalog-swatch";
+            button.setAttribute("aria-label", weather.label + "，方案" + ["一", "二", "三"][optionIndex] + "：" + option[0]);
+            createCanvas(button, weatherIndex, optionIndex, "catalog");
+            button.addEventListener("click", function () {
+              selectedWeather = weatherIndex;
+              selectedOption = optionIndex;
+              render();
+              document.querySelector(".selection").scrollIntoView({ behavior: "smooth", block: "start" });
+            });
+            row.appendChild(button);
+          });
+          group.appendChild(row);
+          catalog.appendChild(group);
+        });
+      }
+
+      function render() {
+        var weather = WEATHER[selectedWeather];
+        var motion = weather.options[selectedOption];
+        selectedTitle.textContent = weather.label;
+        selectedMotion.textContent = "方案" + ["一", "二", "三"][selectedOption] + "：" + motion[0];
+        heroCondition.textContent = weather.label;
+        heroTemperature.textContent = weather.temperature;
+        choiceCopy.textContent = weather.description;
+        decisionValue.textContent = weather.label + " · 方案" + ["一", "二", "三"][selectedOption] + "：" + motion[0];
+        renderTabs();
+        renderOptions();
+        renderCatalog();
+        syncHero();
+      }
+
+      function syncHero() {
+        var existing = false;
+        canvases.forEach(function (item) {
+          if (item.canvas === heroCanvas) {
+            item.weather = selectedWeather;
+            item.option = selectedOption;
+            existing = true;
+          }
+        });
+        if (!existing) {
+          canvases.push({ canvas: heroCanvas, weather: selectedWeather, option: selectedOption });
+        }
+      }
+
+      function fitCanvas(canvas) {
+        var rect = canvas.getBoundingClientRect();
+        var ratio = window.devicePixelRatio || 1;
+        var width = Math.max(1, Math.round(rect.width * ratio));
+        var height = Math.max(1, Math.round(rect.height * ratio));
+        if (canvas.width !== width || canvas.height !== height) {
+          canvas.width = width;
+          canvas.height = height;
+        }
+      }
+
+      function roundedClip(ctx, width, height, radius) {
+        ctx.beginPath();
+        ctx.moveTo(radius, 0);
+        ctx.arcTo(width, 0, width, height, radius);
+        ctx.arcTo(width, height, 0, height, radius);
+        ctx.arcTo(0, height, 0, 0, radius);
+        ctx.arcTo(0, 0, width, 0, radius);
+        ctx.closePath();
+        ctx.clip();
+      }
+
+      function gradient(ctx, width, height, top, bottom) {
+        var fill = ctx.createLinearGradient(0, 0, width, height);
+        fill.addColorStop(0, top);
+        fill.addColorStop(1, bottom);
+        ctx.fillStyle = fill;
+        ctx.fillRect(0, 0, width, height);
+      }
+
+      function circle(ctx, x, y, radius, color) {
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+      }
+
+      function line(ctx, x1, y1, x2, y2, width, color) {
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.lineWidth = width;
+        ctx.lineCap = "round";
+        ctx.strokeStyle = color;
+        ctx.stroke();
+      }
+
+      function cloud(ctx, x, y, size, alpha, tone) {
+        var color = tone || "255,255,255";
+        ctx.fillStyle = "rgba(" + color + "," + alpha + ")";
+        ctx.beginPath();
+        ctx.ellipse(x, y + size * .1, size * .72, size * .34, 0, 0, Math.PI * 2);
+        ctx.arc(x - size * .38, y, size * .32, 0, Math.PI * 2);
+        ctx.arc(x, y - size * .15, size * .42, 0, Math.PI * 2);
+        ctx.arc(x + size * .37, y, size * .28, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      function wrap(value, limit) {
+        var result = value % limit;
+        return result < 0 ? result + limit : result;
+      }
+
+      function ridge(ctx, width, height, baseline, amplitude, drift, color) {
+        ctx.beginPath();
+        ctx.moveTo(0, height);
+        for (var point = 0; point <= 12; point += 1) {
+          var x = point / 12 * width;
+          var y = baseline
+            + Math.sin(point * 1.38 + drift) * amplitude
+            + Math.sin(point * .47 + drift * 1.7) * amplitude * .55;
+          ctx.lineTo(x, y);
+        }
+        ctx.lineTo(width, height);
+        ctx.closePath();
+        ctx.fillStyle = color;
+        ctx.fill();
+      }
+
+      function skyline(ctx, width, height, baseline, color) {
+        ctx.fillStyle = color;
+        for (var building = 0; building < 13; building += 1) {
+          var unit = width / 13;
+          var x = building * unit - unit * .05;
+          var buildingHeight = height * (.055 + ((building * 23) % 9) * .013);
+          ctx.fillRect(x, baseline - buildingHeight, unit * .94, buildingHeight);
+        }
+      }
+
+      function drawEnvironment(ctx, width, height, time, id, option) {
+        var drift = Math.sin(time * .18) * .34 + option * .3;
+        if (id === "sunny") {
+          ridge(ctx, width, height, height * .74, height * .045, drift, "rgba(80,120,143,.18)");
+          ridge(ctx, width, height, height * .84, height * .065, drift * 1.5, "rgba(43,86,105,.30)");
+        } else if (id === "night") {
+          ridge(ctx, width, height, height * .76, height * .04, drift, "rgba(13,30,59,.45)");
+          skyline(ctx, width, height, height * .86, "rgba(10,23,45,.44)");
+        } else if (id === "cloudy") {
+          ridge(ctx, width, height, height * .76, height * .04, drift, "rgba(61,88,105,.26)");
+          ridge(ctx, width, height, height * .87, height * .06, drift * 1.2, "rgba(39,65,82,.34)");
+        } else if (id === "fog") {
+          ridge(ctx, width, height, height * .78, height * .035, drift, "rgba(66,84,76,.14)");
+          ridge(ctx, width, height, height * .88, height * .05, drift * 1.4, "rgba(49,69,59,.17)");
+        } else if (id === "drizzle" || id === "rain") {
+          skyline(ctx, width, height, height * .84, "rgba(27,52,72,.33)");
+          ridge(ctx, width, height, height * .91, height * .035, drift, "rgba(28,58,75,.36)");
+        } else if (id === "snow") {
+          ridge(ctx, width, height, height * .75, height * .07, drift, "rgba(211,244,250,.22)");
+          ridge(ctx, width, height, height * .87, height * .055, drift * 1.3, "rgba(223,249,252,.39)");
+        } else if (id === "storm") {
+          skyline(ctx, width, height, height * .84, "rgba(18,29,52,.46)");
+          ridge(ctx, width, height, height * .91, height * .04, drift, "rgba(18,28,49,.52)");
+        }
+      }
+
+      function drawSun(ctx, width, height, time, option) {
+        var x = width * .78;
+        var y = height * .22;
+        var pulse = 1 + Math.sin(time * (option === 0 ? 1.4 : .85)) * .045;
+        if (option === 1) {
+          for (var beam = 0; beam < 3; beam += 1) {
+            var drift = Math.sin(time * .55 + beam) * width * .035;
+            ctx.save();
+            ctx.translate(x + drift, y);
+            ctx.rotate(.55 + beam * .14);
+            var light = ctx.createLinearGradient(0, 0, width * .8, 0);
+            light.addColorStop(0, "rgba(255,244,197,.24)");
+            light.addColorStop(1, "rgba(255,244,197,0)");
+            ctx.fillStyle = light;
+            ctx.fillRect(0, -height * .075, width * .72, height * .15);
+            ctx.restore();
+          }
+        }
+        if (option === 0) {
+          circle(ctx, x, y, width * (.16 + (pulse - 1) * .25), "rgba(255,231,145,.14)");
+          circle(ctx, x, y, width * (.11 + (pulse - 1) * .18), "rgba(255,231,145,.16)");
+        }
+        circle(ctx, x, y, width * .075 * pulse, "rgba(255,235,157,.92)");
+        if (option === 2) {
+          var driftOne = wrap(time * 20, width * 1.35) - width * .25;
+          var driftTwo = wrap(time * 14 + width * .55, width * 1.4) - width * .35;
+          cloud(ctx, driftOne, height * .25, width * .13, .31);
+          cloud(ctx, driftTwo, height * .43, width * .17, .22);
+        }
+      }
+
+      function drawNight(ctx, width, height, time, option) {
+        var moonX = width * .76;
+        var moonY = height * .24;
+        var pulse = 1 + Math.sin(time * 1.1) * .035;
+        for (var star = 0; star < 17; star += 1) {
+          var x = wrap(star * width * .173 + width * .07, width);
+          var y = height * (.10 + ((star * 29) % 74) / 100);
+          var alpha = .18 + (Math.sin(time * 1.9 + star * 1.7) + 1) * .16;
+          circle(ctx, x, y, Math.max(1.2, width * .006), "rgba(235,242,255," + alpha + ")");
+        }
+        if (option === 0) {
+          circle(ctx, moonX, moonY, width * .13, "rgba(210,223,255,.11)");
+        }
+        circle(ctx, moonX, moonY, width * .064 * pulse, "rgba(242,245,232,.95)");
+        circle(ctx, moonX + width * .025, moonY - width * .014, width * .064, "rgba(34,54,91,.96)");
+        if (option === 1) {
+          var phase = wrap(time * .22, 1);
+          if (phase < .28) {
+            var start = -width * .18 + phase / .28 * width * 1.2;
+            line(ctx, start, height * .18, start + width * .14, height * .28, width * .009, "rgba(244,247,255,.72)");
+          }
+        }
+        if (option === 2) {
+          for (var haze = 0; haze < 3; haze += 1) {
+            var hazeX = wrap(time * (12 + haze * 5) + haze * width * .4, width * 1.5) - width * .25;
+            cloud(ctx, hazeX, height * (.67 + haze * .11), width * (.25 + haze * .03), .09);
+          }
+        }
+      }
+
+      function drawClouds(ctx, width, height, time, option, storm) {
+        var color = storm ? "26,40,64" : "255,255,255";
+        var base = storm ? .43 : .25;
+        for (var index = 0; index < 4; index += 1) {
+          var speed = option === 1 ? (index % 2 === 0 ? 12 : -9) : 10 + index * 4;
+          var x = wrap(time * speed + index * width * .34, width * 1.4) - width * .2;
+          var y = height * (.20 + (index % 2) * .18 + index * .045);
+          var scale = width * (.16 + index * .02);
+          cloud(ctx, x, y, scale, base - index * .025, color);
+        }
+        if (option === 2 && !storm) {
+          var glow = ctx.createRadialGradient(width * .78, height * .15, 0, width * .78, height * .15, width * .34);
+          glow.addColorStop(0, "rgba(255,245,205,.24)");
+          glow.addColorStop(1, "rgba(255,245,205,0)");
+          ctx.fillStyle = glow;
+          ctx.fillRect(0, 0, width, height);
+        }
+      }
+
+      function drawFog(ctx, width, height, time, option) {
+        for (var index = 0; index < 7; index += 1) {
+          var direction = option === 1 && index % 2 ? -1 : 1;
+          var speed = option === 2 ? 21 + index * 2 : 11 + index * 2;
+          var span = width * (1.1 + index * .12);
+          var x = wrap(direction * time * speed + index * width * .23, width + span) - span * .45;
+          var y = height * (.14 + index * .105);
+          var alpha = option === 2 && index > 3 ? .17 : .10 + (index % 2) * .025;
+          line(ctx, x, y, x + span, y, height * (.038 + (index % 3) * .013), "rgba(240,247,241," + alpha + ")");
+        }
+      }
+
+      function drawRain(ctx, width, height, time, option, drizzle) {
+        var count = drizzle ? 18 : 31;
+        var length = drizzle ? height * .10 : height * .16;
+        var speedBase = drizzle ? 58 : 126;
+        var slant = option === 1 || !drizzle ? width * .04 : width * .012;
+        for (var drop = 0; drop < count; drop += 1) {
+          var lane = wrap(drop * 47, 101) / 101;
+          var speed = speedBase + (drop % 5) * (drizzle ? 6 : 14);
+          var y = wrap(time * speed + drop * height * .19, height + length) - length;
+          var x = lane * (width + slant * 1.8) - slant;
+          var alpha = drizzle ? .28 + (drop % 3) * .06 : .36 + (drop % 4) * .07;
+          var foreground = option === 1 && drop % 3 === 0;
+          line(ctx, x, y, x - slant, y + length * (foreground ? 1.25 : 1), foreground ? width * .008 : width * .0045, "rgba(218,237,255," + alpha + ")");
+        }
+        if (option === 2 && drizzle) {
+          for (var ripple = 0; ripple < 3; ripple += 1) {
+            var progress = wrap(time * .45 + ripple * .34, 1);
+            ctx.beginPath();
+            ctx.ellipse(width * (.24 + ripple * .25), height * .85, width * (.025 + progress * .11), height * (.006 + progress * .028), 0, 0, Math.PI * 2);
+            ctx.lineWidth = width * .004;
+            ctx.strokeStyle = "rgba(225,243,255," + (.33 - progress * .2) + ")";
+            ctx.stroke();
+          }
+        }
+        if (option === 2 && !drizzle) {
+          for (var track = 0; track < 9; track += 1) {
+            var trackX = width * (.07 + track * .115);
+            var trackY = wrap(time * (26 + track % 3 * 8) + track * height * .21, height * 1.25) - height * .16;
+            line(ctx, trackX, trackY, trackX - width * .014, trackY + height * .18, width * .007, "rgba(230,242,255,.22)");
+          }
+        }
+      }
+
+      function drawSnow(ctx, width, height, time, option) {
+        for (var flake = 0; flake < 24; flake += 1) {
+          var progress = wrap(time * (.075 + (flake % 4) * .019) + flake * .107, 1);
+          var wind = option === 1 ? Math.sin(time * 1.4 + flake) * width * .12 : Math.sin(time * .8 + flake * .72) * width * .03;
+          var x = wrap(flake * width * .177 + width * .05, width) + wind;
+          var y = progress * (height + height * .14) - height * .07;
+          var radius = width * (.008 + (flake % 3) * .003);
+          circle(ctx, x, y, radius, "rgba(248,253,255," + (.45 + (flake % 4) * .1) + ")");
+        }
+        if (option === 2) {
+          var snowbank = ctx.createLinearGradient(0, height * .80, 0, height);
+          snowbank.addColorStop(0, "rgba(236,251,255,.05)");
+          snowbank.addColorStop(1, "rgba(236,251,255,.32)");
+          ctx.fillStyle = snowbank;
+          ctx.fillRect(0, height * .80, width, height * .2);
+          for (var glint = 0; glint < 7; glint += 1) {
+            var alpha = .2 + (Math.sin(time * 1.8 + glint) + 1) * .18;
+            circle(ctx, width * (.1 + glint * .13), height * (.85 + (glint % 2) * .06), width * .006, "rgba(255,255,255," + alpha + ")");
+          }
+        }
+      }
+
+      function bolt(ctx, width, height, x, y, scale, alpha, fork) {
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x - width * .075 * scale, y + height * .20 * scale);
+        ctx.lineTo(x - width * .01 * scale, y + height * .19 * scale);
+        ctx.lineTo(x - width * .11 * scale, y + height * .46 * scale);
+        ctx.lineWidth = width * .014 * scale;
+        ctx.lineCap = "round";
+        ctx.strokeStyle = "rgba(255,243,166," + alpha + ")";
+        ctx.stroke();
+        if (fork) {
+          line(ctx, x - width * .065 * scale, y + height * .24 * scale, x - width * .15 * scale, y + height * .33 * scale, width * .009 * scale, "rgba(255,243,166," + alpha * .82 + ")");
+        }
+      }
+
+      function drawStorm(ctx, width, height, time, option) {
+        drawClouds(ctx, width, height, time, option, true);
+        drawRain(ctx, width, height, time, option === 2 ? 1 : 0, false);
+        var cycle = wrap(time * (option === 0 ? .29 : .42), 1);
+        var flash = 0;
+        if (cycle < .06) {
+          flash = .28 * (1 - cycle / .06);
+        } else if (option === 1 && cycle > .12 && cycle < .16) {
+          flash = .2 * (1 - (cycle - .12) / .04);
+        }
+        if (flash > 0) {
+          ctx.fillStyle = "rgba(235,225,255," + flash + ")";
+          ctx.fillRect(0, 0, width, height);
+        }
+        if (option === 1 && cycle < .08) {
+          bolt(ctx, width, height, width * .74, height * .10, 1, .9, true);
+        } else if (option === 2 && cycle < .09) {
+          bolt(ctx, width, height, width * .82, height * .04, .75, .52, false);
+        } else if (option === 0 && cycle < .045) {
+          bolt(ctx, width, height, width * .70, height * .08, .68, .5, false);
+        }
+        if (option === 2) {
+          var edge = ctx.createRadialGradient(width, height * .18, 0, width, height * .18, width * .7);
+          edge.addColorStop(0, "rgba(182,157,224,.18)");
+          edge.addColorStop(1, "rgba(182,157,224,0)");
+          ctx.fillStyle = edge;
+          ctx.fillRect(0, 0, width, height);
+        }
+      }
+
+      function drawScene(ctx, width, height, time, weatherIndex, optionIndex) {
+        var id = WEATHER[weatherIndex].id;
+        ctx.clearRect(0, 0, width, height);
+        ctx.save();
+        roundedClip(ctx, width, height, Math.max(6, width * .11));
+
+        if (id === "sunny") {
+          gradient(ctx, width, height, "#79b8e9", "#4d80c5");
+          drawEnvironment(ctx, width, height, time, id, optionIndex);
+          drawSun(ctx, width, height, time, optionIndex);
+        } else if (id === "night") {
+          gradient(ctx, width, height, "#314c7c", "#162b53");
+          drawEnvironment(ctx, width, height, time, id, optionIndex);
+          drawNight(ctx, width, height, time, optionIndex);
+        } else if (id === "cloudy") {
+          gradient(ctx, width, height, "#8ba4bc", "#5c7590");
+          drawEnvironment(ctx, width, height, time, id, optionIndex);
+          drawClouds(ctx, width, height, time, optionIndex, false);
+        } else if (id === "fog") {
+          gradient(ctx, width, height, "#9aa8a2", "#687971");
+          drawEnvironment(ctx, width, height, time, id, optionIndex);
+          drawFog(ctx, width, height, time, optionIndex);
+        } else if (id === "drizzle") {
+          gradient(ctx, width, height, "#7794a6", "#536f81");
+          drawEnvironment(ctx, width, height, time, id, optionIndex);
+          drawClouds(ctx, width, height, time, 0, false);
+          drawRain(ctx, width, height, time, optionIndex, true);
+        } else if (id === "rain") {
+          gradient(ctx, width, height, "#526d88", "#344e6c");
+          drawEnvironment(ctx, width, height, time, id, optionIndex);
+          drawClouds(ctx, width, height, time, 0, false);
+          drawRain(ctx, width, height, time, optionIndex, false);
+        } else if (id === "snow") {
+          gradient(ctx, width, height, "#6ca6bc", "#426d86");
+          drawEnvironment(ctx, width, height, time, id, optionIndex);
+          drawSnow(ctx, width, height, time, optionIndex);
+        } else if (id === "storm") {
+          gradient(ctx, width, height, "#4a526e", "#2d394f");
+          drawEnvironment(ctx, width, height, time, id, optionIndex);
+          drawStorm(ctx, width, height, time, optionIndex);
+        }
+
+        var vignette = ctx.createLinearGradient(0, 0, 0, height);
+        vignette.addColorStop(0, "rgba(0,0,0,.02)");
+        vignette.addColorStop(1, "rgba(0,0,0,.14)");
+        ctx.fillStyle = vignette;
+        ctx.fillRect(0, 0, width, height);
+        ctx.restore();
+      }
+
+      function frame(now) {
+        if (!lastTime) {
+          lastTime = now;
+        }
+        if (!paused) {
+          elapsed += (now - lastTime) / 1000;
+        }
+        lastTime = now;
+        canvases.forEach(function (item) {
+          if (!item.canvas.isConnected) {
+            return;
+          }
+          fitCanvas(item.canvas);
+          var ctx = item.canvas.getContext("2d");
+          drawScene(ctx, item.canvas.width, item.canvas.height, elapsed, item.weather, item.option);
+        });
+        window.requestAnimationFrame(frame);
+      }
+
+      pauseButton.addEventListener("click", function () {
+        paused = !paused;
+        pauseButton.textContent = paused ? "播放" : "暂停";
+        pauseButton.setAttribute("aria-pressed", String(paused));
+      });
+
+      copyButton.addEventListener("click", function () {
+        var text = decisionValue.textContent;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(function () {
+            copyStatus.textContent = "已复制：" + text;
+          }, function () {
+            copyStatus.textContent = "请记录：" + text;
+          });
+        } else {
+          copyStatus.textContent = "请记录：" + text;
+        }
+      });
+
+      render();
+      window.requestAnimationFrame(frame);
+    }());
+  </script>
+</body>
+</html>

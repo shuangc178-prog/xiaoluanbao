@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 窗口层配色与 Compose 的 Claude 主题保持一致（canvas #FAF9F5 / accent #C6613F）。 -->
+    <style name="Theme.CampusLife" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">#FAF9F5</item>
+        <item name="android:windowBackground">#FAF9F5</item>
+        <item name="android:colorAccent">#C6613F</item>
+    </style>
+</resources>

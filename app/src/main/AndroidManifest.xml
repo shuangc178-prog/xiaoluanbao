@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 每天把完整备份通过 HTTPS WebDAV 上传到用户自己的坚果云。 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Android 13 起通知需要运行时授权；用户拒绝后应用内仍能看到提醒，只是不再弹通知。 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!--
+      精确闹钟权限分两条，按系统版本切换——这是「提醒准时」的第一前提。
+
+      Android 13（API 33）起用 USE_EXACT_ALARM：**安装即授予，不需要任何用户操作**，
+      是唯一不依赖引导的准时路径。它是 Google Play 的受限权限，只允许核心功能是
+      闹钟 / 日历的应用声明；本项目自用侧载、不上架 Play，因此适用。
+      将来若要上架 Play，这里要换成「声明 SCHEDULE_EXACT_ALARM + 应用内授权引导」，
+      代码侧不用改（ReminderAlarms 的降级链本来就兼容没授权的情况）。
+
+      Android 12（API 31/32）没有 USE_EXACT_ALARM，只能用 SCHEDULE_EXACT_ALARM；
+      它在 API 32 及以下是安装即授予的普通权限，所以 maxSdkVersion 卡在 32。
+    -->
+    <uses-permission
+        android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        android:maxSdkVersion="32" />
+    <uses-permission
+        android:name="android.permission.USE_EXACT_ALARM"
+        android:minSdkVersion="33" />
+    <!-- 重启后系统会清空闹钟，需要重新按存档排一遍。 -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!--
+      悬浮提醒卡片（见产品文档 16.32）。
+
+      这是「提醒能浮在**别的应用**上面」的唯一手段：应用内的弹层只在应用自己的界面里出现，
+      要压住别人就得是系统级悬浮窗。它是一项**特殊权限**，必须由用户在系统设置里授予
+      （MIUI / HyperOS 上叫「悬浮窗」），应用只能读 `Settings.canDrawOverlays()` 并把结论说出来。
+      没授予时提醒照旧：震三下 + 通知栏一条，只是不浮卡片。
+    -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!--
+      提醒的振动。
+
+      振动本身由系统在弹通知时执行（模式配在通知渠道上，见 ReminderNotifier），
+      这条普通权限在 AOSP 上不是必需的，但在 MIUI / HyperOS 这类机型上，
+      没有它振动会被静默吃掉——而振动正是这次提醒唯一「不靠看」的通道，
+      所以显式声明，不让它成为第二个静默失败点。
+    -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.CampusLife">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- 闹钟到点的落点：用显式 PendingIntent 调起，不需要对外暴露。 -->
+        <receiver
+            android:name=".data.reminder.ReminderReceiver"
+            android:exported="false" />
+
+        <!-- 重排闹钟的四个系统时机。闹钟存在 system_server 里、进程不在了也还在，
+             但下面这些事件会让它失效或失准，必须收到广播后按存档重排一遍：
+
+             - BOOT_COMPLETED：重启会清空全部闹钟。
+             - MY_PACKAGE_REPLACED：应用更新后同样会清空。
+             - SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED：授权精确闹钟之后，
+               要把之前用非精确闹钟排下的那批换成精确闹钟，否则会一直慢下去。
+             - TIME_SET / TIMEZONE_CHANGED：闹钟走的是 RTC（墙钟）绝对毫秒，
+               用户改了系统时间或换了时区，所有已排闹钟对应的钟点就整体偏了。
+               少了这两条，「早上 8:30 提醒」会在改过时间之后按错的时刻响。 -->
+        <receiver
+            android:name=".data.reminder.ReminderRestoreReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

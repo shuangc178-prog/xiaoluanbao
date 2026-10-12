@@ -56,6 +56,22 @@ class DailyPlanStore(private val context: Context) {
 
     suspend fun snapshot(): List<DailyPlan> = plans.first()
 
+    /** 所有任务操作在 DataStore 的同一个事务中读改写，快速连点不会覆盖旧结果。 */
+    suspend fun updatePlans(transform: (List<DailyPlan>) -> List<DailyPlan>) {
+        context.dailyPlanDataStore.edit { preferences ->
+            val withTasks = groupPlans(preferences[PLANS_KEY].orEmpty().mapNotNull(::decodePlanTask))
+            val existingDays = withTasks.mapTo(mutableSetOf()) { it.epochDay }
+            val empty = preferences[EMPTY_PLAN_DAYS_KEY].orEmpty().mapNotNull(String::toLongOrNull)
+                .filterNot { it in existingDays }.map { DailyPlan(it, emptyList()) }
+            val updated = transform((withTasks + empty).sortedBy { it.epochDay })
+            preferences[PLANS_KEY] = updated.flatMap { plan ->
+                plan.tasks.mapIndexed { index, task -> encodePlanTask(plan.epochDay, index, task) }
+            }.toSet()
+            preferences[EMPTY_PLAN_DAYS_KEY] = updated.filter { it.tasks.isEmpty() }
+                .map { it.epochDay.toString() }.toSet()
+        }
+    }
+
     /**
      * 恢复时一次替换全部日期，避免逐日 savePlan 让界面经历一串半恢复状态。
      */

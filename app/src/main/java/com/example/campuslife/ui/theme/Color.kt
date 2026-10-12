@@ -32,10 +32,6 @@ internal val ClaudeMark = Color(0xFFF4DDB5)
 internal val ClaudeDanger = Color(0xFFB6483D)
 internal val ClaudeDangerSoft = Color(0xFFF5E5E4)
 
-// 文档阅读器（Typora Claude 主题）用到的其余语义色。
-internal val ClaudeCodeText = Color(0xFF2E2E2B)
-internal val ClaudeRowHover = Color(0x0A141413)
-
 // 分类与图表用色，取自 Claude 代码高亮的语义色，保证整页同源。
 internal val ClaudeGreen = Color(0xFF4F725E)
 internal val ClaudeGreenSoft = Color(0xFFE6EBE8)
@@ -66,13 +62,6 @@ internal val ClaudeDarkAccentSoft = Color(0xFF59473F)
 internal val ClaudeDarkMark = Color(0xFF6E5F42)
 internal val ClaudeDarkDanger = Color(0xFFEF8A80)
 internal val ClaudeDarkDangerSoft = Color(0xFF564844)
-
-// 文档阅读器（Typora Claude 主题）用到的其余语义色。
-internal val ClaudeDarkCodeBg = Color(0xFF1F1E1D)
-internal val ClaudeDarkCodeText = Color(0xFFE8E6DC)
-internal val ClaudeDarkCodeInlineBg = Color(0xFF262624)
-internal val ClaudeDarkCodeInlineText = Color(0xFFEDA386)
-internal val ClaudeDarkRowHover = Color(0x09FAF9F5)
 
 internal val ClaudeDarkGreen = Color(0xFF8FB69D)
 internal val ClaudeDarkGreenSoft = Color(0xFF4C534C)

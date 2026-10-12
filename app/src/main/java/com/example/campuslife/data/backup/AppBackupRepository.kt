@@ -71,7 +71,8 @@ class AppBackupRepository(context: Context) {
             try {
                 moveDirectoryAside(imports, oldImports)
                 moveDirectoryIntoPlace(stagingStudy, imports)
-                applySnapshot(read.snapshot)
+                // 恢复后的计时停在备份时刻，不把备份离线期间误算为学习时间。
+                applySnapshot(read.snapshot.pauseTaskTimers(read.manifest.createdAtEpochMillis))
                 reminderStore.resetAfterDataRestore()
                 oldImports.deleteRecursively()
                 trimSafetyBackups(safetyDirectory)
@@ -113,7 +114,7 @@ class AppBackupRepository(context: Context) {
         )
         BackupArchive.write(
             destination = destination,
-            snapshot = snapshot,
+            snapshot = snapshot.pauseTaskTimers(createdAtEpochMillis),
             manifest = manifest,
             studyImportsDirectory = File(appContext.filesDir, STUDY_IMPORTS_DIRECTORY),
         )
@@ -136,7 +137,6 @@ class AppBackupRepository(context: Context) {
         cards = cardStore.snapshot(),
         studyDocuments = studyStore.snapshot(),
         darkTheme = themeStore.snapshot(),
-        studyTaskStates = studyStore.taskStateSnapshot(),
     )
 
     private suspend fun applySnapshot(snapshot: AppBackupSnapshot) {
@@ -145,7 +145,6 @@ class AppBackupRepository(context: Context) {
         journalStore.replaceAll(snapshot.journal)
         cardStore.replaceAll(snapshot.cards)
         studyStore.replaceAll(snapshot.studyDocuments)
-        studyStore.replaceTaskStates(snapshot.studyTaskStates)
         themeStore.restore(snapshot.darkTheme)
     }
 
@@ -162,7 +161,9 @@ class AppBackupRepository(context: Context) {
             if (
                 task.title.isBlank() ||
                 (minute != null && minute !in 0 until 24 * 60) ||
-                (manualOrder != null && manualOrder < 0)
+                (manualOrder != null && manualOrder < 0) ||
+                task.learningElapsedMillis < 0L ||
+                (task.learningStartedAtEpochMillis?.let { it < 0L } == true)
             ) {
                 throw BackupFormatException("备份里存在无效计划任务")
             }
@@ -174,16 +175,6 @@ class AppBackupRepository(context: Context) {
         val documentIds = snapshot.studyDocuments.map { it.id }
         if (documentIds.any(String::isBlank) || documentIds.distinct().size != documentIds.size) {
             throw BackupFormatException("备份里的学习资料索引无效")
-        }
-        val taskStateIds = snapshot.studyTaskStates.map { it.documentId }
-        if (
-            taskStateIds.any { it.isBlank() || it !in documentIds } ||
-            taskStateIds.distinct().size != taskStateIds.size ||
-            snapshot.studyTaskStates.any { state ->
-                state.sourceFingerprint.isBlank() || state.checkedIndexes.any { it < 0 }
-            }
-        ) {
-            throw BackupFormatException("备份里的学习资料任务状态无效")
         }
     }
 

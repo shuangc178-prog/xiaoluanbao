@@ -14,6 +14,9 @@ import com.example.campuslife.data.study.StudyCategory
 import com.example.campuslife.data.study.StudyDocument
 import com.example.campuslife.data.study.StudyImporter
 import com.example.campuslife.data.study.StudyStore
+import com.example.campuslife.data.study.decodeTaskCheckboxState
+import com.example.campuslife.data.study.decodeVocabularyTableMask
+import com.example.campuslife.data.study.encodeTaskCheckboxState
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
@@ -23,7 +26,6 @@ import java.util.Locale
 class StudyController(
     val state: StudyUiState,
     val allDocuments: List<StudyDocumentUiModel>,
-    val checkedTasksByDocument: Map<String, Set<Int>>,
     val onSelectCategory: (StudyCategory) -> Unit,
     val onSearchQueryChange: (String) -> Unit,
     val onImportFiles: (List<Uri>) -> Unit,
@@ -32,7 +34,8 @@ class StudyController(
     val onDeleteDocument: (String) -> Unit,
     val onSetDocumentCategory: (String, StudyCategory) -> Unit,
     val onSaveReading: (id: String, scrollY: Int, progress: Float) -> Unit,
-    val onToggleTask: (id: String, index: Int, checked: Boolean) -> Unit,
+    val onSaveVocabularyMask: (id: String, mask: String?) -> Unit,
+    val onSaveTaskCheckboxState: (id: String, state: String?) -> Unit,
 )
 
 @Composable
@@ -47,24 +50,9 @@ fun rememberStudyController(): StudyController {
     var selectedCategory by rememberSaveable { mutableStateOf(StudyCategory.Notes) }
     var isImporting by remember { mutableStateOf(false) }
     var importResult by remember { mutableStateOf<com.example.campuslife.data.study.StudyImportResult?>(null) }
-    var checkedTasksByDocument by remember { mutableStateOf<Map<String, Set<Int>>>(emptyMap()) }
 
     LaunchedEffect(store) {
         store.documents.collect { loaded -> documents = loaded }
-    }
-
-    // 任务勾选状态由「正文里已勾上的项」和覆盖层合并而来，所以要等资料列表到位后再算一遍；
-    // 列表没变时只算一次，避免每次重组都去读 DataStore 和正文文件。
-    LaunchedEffect(documents.map { it.id }) {
-        if (documents.isEmpty()) {
-            checkedTasksByDocument = emptyMap()
-            return@LaunchedEffect
-        }
-        val loaded = documents.associate { document ->
-            document.id to runCatching { store.effectiveCheckedTaskIndexes(document) }
-                .getOrDefault(emptySet())
-        }
-        checkedTasksByDocument = loaded
     }
 
     val allUiDocuments = documents.map(::toUiModel)
@@ -111,7 +99,6 @@ fun rememberStudyController(): StudyController {
     return StudyController(
         state = state,
         allDocuments = allUiDocuments,
-        checkedTasksByDocument = checkedTasksByDocument,
         onSelectCategory = { selectedCategory = it },
         onSearchQueryChange = { searchQuery = it },
         onImportFiles = { uris ->
@@ -141,26 +128,32 @@ fun rememberStudyController(): StudyController {
                 )
             }
         },
-        onToggleTask = { id, index, checked ->
-            // 先照现状改界面，再落库：点击到重绘之间不能有延迟，而落库失败也只影响下次打开。
-            checkedTasksByDocument = checkedTasksByDocument + (id to checkedTasksByDocument[id].orEmpty()
-                .toMutableSet()
-                .apply { if (checked) add(index) else remove(index) })
-            documents.firstOrNull { it.id == id }?.let { document ->
-                scope.launch {
-                    store.setTaskChecked(
-                        document = document,
-                        index = index,
-                        checked = checked,
-                        knownStates = store.loadTaskStates(),
-                    )
+        onSaveVocabularyMask = { id, mask ->
+            // 先更新内存中的资料，用户点完单元格立刻返回再重进时也能拿到最新状态；
+            // DataStore 的流随后会用同一份持久化结果收敛这里的数据。
+            documents = documents.map { document ->
+                if (document.id == id) document.copy(vocabularyMask = mask) else document
+            }
+            scope.launch { store.updateVocabularyMask(id, mask) }
+        },
+        onSaveTaskCheckboxState = { id, state ->
+            val normalizedState = state
+                ?.let(::decodeTaskCheckboxState)
+                ?.let(::encodeTaskCheckboxState)
+            // 连续点选后立即退出、重进，也先从内存拿到最后一次勾选结果。
+            documents = documents.map { document ->
+                if (document.id == id) {
+                    document.copy(taskCheckboxState = normalizedState)
+                } else {
+                    document
                 }
             }
+            scope.launch { store.updateTaskCheckboxState(id, normalizedState) }
         },
     )
 }
 
-private fun toUiModel(document: StudyDocument): StudyDocumentUiModel = StudyDocumentUiModel(
+internal fun toUiModel(document: StudyDocument): StudyDocumentUiModel = StudyDocumentUiModel(
     id = document.id,
     title = document.title,
     format = document.format,
@@ -169,10 +162,20 @@ private fun toUiModel(document: StudyDocument): StudyDocumentUiModel = StudyDocu
     detailLabel = "${formatFileSize(document.sizeBytes)} · ${formatDate(document.importedAtEpochMillis)}",
     snapshotId = document.snapshotId,
     relativePath = document.relativePath,
+    contentHash = document.contentHash,
     progress = document.progress,
     scrollY = document.scrollY,
     lastReadAtEpochMillis = document.lastReadAtEpochMillis,
     category = document.category,
+    // 早期有问题的版本曾写入空哈希；资料正文变化后也可能留下旧坐标。
+    // 两类状态都不能自动遮挡，等用户重新选列时再由新状态覆盖。
+    vocabularyMask = document.vocabularyMask?.takeIf { encoded ->
+        decodeVocabularyTableMask(encoded)?.matchesSource(document.contentHash) == true
+    },
+    taskCheckboxState = document.taskCheckboxState
+        ?.let(::decodeTaskCheckboxState)
+        ?.takeIf { it.matchesSource(document.contentHash) }
+        ?.let(::encodeTaskCheckboxState),
 )
 
 private val dateFormatter = DateTimeFormatter.ofPattern("M月d日", Locale.SIMPLIFIED_CHINESE)

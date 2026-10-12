@@ -30,6 +30,7 @@ class StudyImporter(
 
         val batches = mutableListOf<ImportBatch>()
         val errors = mutableListOf<String>()
+        val resourceFolderMessages = mutableListOf<String>()
         uris.distinct().forEach { uri ->
             val metadata = readUriMetadata(uri)
             runCatching {
@@ -39,10 +40,21 @@ class StudyImporter(
                     else -> throw IOException("不支持的格式：${metadata.displayName}")
                 }
             }.onSuccess(batches::add)
-                .onFailure { error -> errors += error.message ?: "无法导入 ${metadata.displayName}" }
+                .onFailure { error ->
+                    val message = error.message ?: "无法导入 ${metadata.displayName}"
+                    if (error is ResourceFolderRequiredException) {
+                        resourceFolderMessages += message
+                    } else {
+                        errors += message
+                    }
+                }
         }
 
-        persistBatches(batches, errors)
+        persistBatches(
+            batches = batches,
+            initialErrors = errors,
+            resourceFolderMessage = resourceFolderMessages.firstOrNull(),
+        )
     }
 
     suspend fun importFolder(
@@ -73,20 +85,46 @@ class StudyImporter(
     private suspend fun persistBatches(
         batches: List<ImportBatch>,
         initialErrors: List<String>,
+        resourceFolderMessage: String? = null,
     ): StudyImportResult {
         val errors = initialErrors.toMutableList()
-        val existingHashes = store.documents.first().mapTo(mutableSetOf()) { it.contentHash }
+        val existingDocuments = store.documents.first()
+        val documentsByHash = existingDocuments.associateBy { it.contentHash }.toMutableMap()
         val accepted = mutableListOf<StudyDocument>()
+        val replacedSnapshotIds = mutableSetOf<String>()
+        var imported = 0
+        var replaced = 0
         var skipped = 0
 
         batches.forEach { batch ->
-            val acceptedFromBatch = batch.documents.filter { document ->
-                if (document.contentHash in existingHashes) {
-                    skipped += 1
-                    false
-                } else {
-                    existingHashes += document.contentHash
-                    true
+            val acceptedFromBatch = mutableListOf<StudyDocument>()
+            batch.documents.forEach { incoming ->
+                val existing = documentsByHash[incoming.contentHash]
+                when {
+                    existing == null -> {
+                        acceptedFromBatch += incoming
+                        documentsByHash[incoming.contentHash] = incoming
+                        imported += 1
+                    }
+
+                    hasBetterImageResources(existing = existing, incoming = incoming) -> {
+                        val replacement = incoming.copy(
+                            id = existing.id,
+                            version = existing.version + 1,
+                            lastReadAtEpochMillis = existing.lastReadAtEpochMillis,
+                            scrollY = existing.scrollY,
+                            progress = existing.progress,
+                            category = existing.category,
+                            vocabularyMask = existing.vocabularyMask,
+                            taskCheckboxState = existing.taskCheckboxState,
+                        )
+                        acceptedFromBatch += replacement
+                        documentsByHash[incoming.contentHash] = replacement
+                        replacedSnapshotIds += existing.snapshotId
+                        replaced += 1
+                    }
+
+                    else -> skipped += 1
                 }
             }
             accepted += acceptedFromBatch
@@ -103,10 +141,25 @@ class StudyImporter(
                 }
         }
 
+        if (persisted && replacedSnapshotIds.isNotEmpty()) {
+            val replacedIds = accepted.mapTo(mutableSetOf()) { it.id }
+            val snapshotsStillUsed = buildSet {
+                existingDocuments
+                    .filterNot { it.id in replacedIds }
+                    .mapTo(this) { it.snapshotId }
+                accepted.mapTo(this) { it.snapshotId }
+            }
+            replacedSnapshotIds
+                .filterNot(snapshotsStillUsed::contains)
+                .forEach(::deleteSnapshot)
+        }
+
         return StudyImportResult(
-            importedCount = if (persisted) accepted.size else 0,
+            importedCount = if (persisted) imported else 0,
+            replacedCount = if (persisted) replaced else 0,
             skippedDuplicates = skipped,
             errors = errors,
+            resourceFolderMessage = resourceFolderMessage,
         )
     }
 
@@ -125,6 +178,15 @@ class StudyImporter(
                 copyWithLimits(input, target, ImportBudget())
             }
             if (metadata.modifiedAtEpochMillis > 0) target.setLastModified(metadata.modifiedAtEpochMillis)
+            val localImages = markdownLocalImageSources(readTextPrefix(target, MAX_RESOURCE_SCAN_CHARS))
+            if (localImages.isNotEmpty()) {
+                val example = localImages.first().take(MAX_RESOURCE_EXAMPLE_LENGTH)
+                throw ResourceFolderRequiredException(
+                    "“${metadata.displayName}”引用了本地图片（$example）。" +
+                        "Android 单独选择 Markdown 时不会授权旁边的图片目录，请继续选择同时包含" +
+                        "该 Markdown 与 assets 的资料文件夹。",
+                )
+            }
             ImportBatch(
                 snapshotId = snapshotId,
                 documents = listOf(
@@ -359,6 +421,34 @@ class StudyImporter(
             ?: fallback
     }
 
+    private fun hasBetterImageResources(
+        existing: StudyDocument,
+        incoming: StudyDocument,
+    ): Boolean = resolvableLocalImageCount(incoming) > resolvableLocalImageCount(existing)
+
+    private fun resolvableLocalImageCount(document: StudyDocument): Int {
+        val source = documentFile(document) ?: return 0
+        val markdown = readTextPrefix(source, MAX_RESOURCE_SCAN_CHARS)
+        if (markdown.isEmpty()) return 0
+        val snapshotRoot = File(importsDirectory, document.snapshotId)
+        return markdownLocalImageSources(markdown).count { imageSource ->
+            resolveImportedLocalImage(
+                snapshotRoot = snapshotRoot,
+                markdownFile = source,
+                markdownSource = markdown,
+                imageSource = imageSource,
+            ) != null
+        }
+    }
+
+    private fun readTextPrefix(file: File, maxChars: Int): String = runCatching {
+        file.bufferedReader(Charsets.UTF_8).use { reader ->
+            val buffer = CharArray(maxChars)
+            val count = reader.read(buffer)
+            if (count <= 0) "" else String(buffer, 0, count).removePrefix("\uFEFF")
+        }
+    }.getOrDefault("")
+
     private fun sha256(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")
         file.inputStream().buffered().use { input ->
@@ -457,8 +547,12 @@ class StudyImporter(
         const val MAX_TREE_DEPTH = 32
         const val MAX_FILE_NAME_LENGTH = 180
         const val MAX_TITLE_SCAN_CHARS = 512 * 1024
+        const val MAX_RESOURCE_SCAN_CHARS = 8 * 1024 * 1024
+        const val MAX_RESOURCE_EXAMPLE_LENGTH = 96
 
         val MARKDOWN_TITLE = Regex("(?m)^\\s{0,3}#{1,6}\\s+(.+?)\\s*#*\\s*$")
         val MARKDOWN_DECORATION = Regex("[*_`~]+")
     }
 }
+
+private class ResourceFolderRequiredException(message: String) : IOException(message)

@@ -15,7 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import com.example.campuslife.ui.components.ClaudeButton
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -24,7 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.example.campuslife.ui.components.ClaudeTextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -234,7 +234,7 @@ private fun CardCollectionSeriesContent(
                         )
                     }
                 }
-                Button(
+                ClaudeButton(
                     onClick = { confirmExchange = true },
                     enabled = collection.canExchange,
                     shape = RoundedCornerShape(12.dp),
@@ -350,7 +350,7 @@ private fun ExchangeConfirmDialog(
             )
         },
         confirmButton = {
-            Button(
+            ClaudeButton(
                 onClick = onConfirm,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
@@ -361,7 +361,7 @@ private fun ExchangeConfirmDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("再想想") }
+            ClaudeTextButton(onClick = onDismiss) { Text("再想想") }
         },
         containerColor = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(14.dp),
@@ -384,7 +384,7 @@ internal fun CardExchangeResultDialog(
             )
         },
         confirmButton = {
-            Button(
+            ClaudeButton(
                 onClick = onDismiss,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,

@@ -1,6 +1,7 @@
 package com.example.campuslife.ui.today
 
 import com.example.campuslife.data.checkin.formatMinuteOfDay
+import com.example.campuslife.data.plan.TaskLearningPhase
 
 data class TodayUiState(
     val timeLabel: String = "13:15",
@@ -18,6 +19,8 @@ data class TodayPriorityUiModel(
     val expectedStartMinute: Int? = null,
     /** null 为时间自动排序；非 null 为用户手动指定的位置。 */
     val manualOrder: Int? = null,
+    val learningPhase: TaskLearningPhase = TaskLearningPhase.Idle,
+    val learningDurationMillis: Long = 0L,
 ) {
     val expectedStartLabel: String? get() = expectedStartMinute?.let(::formatMinuteOfDay)
 }
@@ -61,7 +64,7 @@ enum class TodayCategory {
 /**
  * 计划事项的状态。
  *
- * 原型阶段刻意不设「部分完成」：勾选是唯一的完成操作，
+ * 页面状态不设「部分完成」：长按计时按钮结束并完成任务，
  * 状态再多一档就要解释「部分完成到什么程度」，收益不成比例。
  */
 enum class TodayItemStatus {

@@ -12,7 +12,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.example.campuslife.ui.components.ClaudeTextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,7 +49,7 @@ internal fun SectionHeader(
                     )
                 }
                 if (actionLabel != null) {
-                    TextButton(
+                    ClaudeTextButton(
                         onClick = onActionClick,
                         modifier = Modifier.padding(start = 4.dp),
                     ) {
@@ -98,7 +98,7 @@ internal fun EmptySectionCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            TextButton(
+            ClaudeTextButton(
                 onClick = onActionClick,
                 modifier = Modifier.padding(start = 8.dp),
             ) {

@@ -94,9 +94,4 @@ object StudyPreviewData {
         progress = 0.42f,
         progressLabel = "已读 42%",
     )
-
-    /** 预览里的勾选覆盖层：给第一份资料勾上第 0、2 项，Reading 预览因此能看到完成行。 */
-    val checkedTasksByDocument: Map<String, Set<Int>> = mapOf(
-        pythonBasics.id to setOf(0, 2),
-    )
 }

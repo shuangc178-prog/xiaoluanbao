@@ -11,14 +11,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import com.example.campuslife.ui.components.ClaudeButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import com.example.campuslife.ui.components.ClaudeOutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.example.campuslife.ui.components.ClaudeTextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -118,7 +118,7 @@ fun CloudBackupDialog(
                         visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     )
-                    Button(
+                    ClaudeButton(
                         onClick = { controller.onConnect(email, appPassword) },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !controller.isBusy && email.isNotBlank() && appPassword.isNotBlank(),
@@ -140,21 +140,21 @@ private fun ConnectedBackupContent(
     onRequestUpload: () -> Unit,
     onRequestDisconnect: () -> Unit,
 ) {
-    Button(
+    ClaudeButton(
         onClick = onRequestUpload,
         modifier = Modifier.fillMaxWidth(),
         enabled = !controller.isBusy,
     ) {
         Text("上传本机备份")
     }
-    OutlinedButton(
+    ClaudeOutlinedButton(
         onClick = controller.onPrepareRestore,
         modifier = Modifier.fillMaxWidth(),
         enabled = !controller.isBusy,
     ) {
         Text("从坚果云恢复")
     }
-    TextButton(
+    ClaudeTextButton(
         onClick = onRequestDisconnect,
         modifier = Modifier.fillMaxWidth(),
         enabled = !controller.isBusy,
@@ -227,10 +227,10 @@ private fun RestoreConfirmationDialog(
             }
         },
         confirmButton = {
-            Button(onClick = onConfirm, enabled = !isBusy) { Text("确认恢复") }
+            ClaudeButton(onClick = onConfirm, enabled = !isBusy) { Text("确认恢复") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !isBusy) { Text("取消") }
+            ClaudeTextButton(onClick = onDismiss, enabled = !isBusy) { Text("取消") }
         },
     )
 }
@@ -259,12 +259,12 @@ private fun BackupActionConfirmationDialog(
             )
         },
         confirmButton = {
-            Button(onClick = onConfirm, enabled = !isBusy) {
+            ClaudeButton(onClick = onConfirm, enabled = !isBusy) {
                 Text(if (isUpload) "确认上传" else "确认断开")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !isBusy) { Text("取消") }
+            ClaudeTextButton(onClick = onDismiss, enabled = !isBusy) { Text("取消") }
         },
     )
 }

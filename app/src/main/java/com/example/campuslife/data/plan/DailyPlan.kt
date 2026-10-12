@@ -21,6 +21,11 @@ data class PlanTask(
     val expectedStartMinute: Int? = null,
     /** null 表示跟随时间自动排序；非 null 表示用户选择的手动位置（从 0 开始）。 */
     val manualOrder: Int? = null,
+    /** 已结算的实际学习时间；暂停时不再增加。 */
+    val learningElapsedMillis: Long = 0L,
+    /** 正在计时的一段的开始时刻，跨进程重启保留。 */
+    val learningStartedAtEpochMillis: Long? = null,
+    val hasLearningStarted: Boolean = false,
 ) {
     /** `8 * 60 + 30` → `08:30`；没安排时间时为 null。 */
     val expectedStartLabel: String? get() = expectedStartMinute?.let(::formatMinuteOfDay)
@@ -170,13 +175,14 @@ private fun weekdayLabel(dayOfWeek: DayOfWeek): String = when (dayOfWeek) {
  * 不用逗号、竖线这类常见字符，是因为标题由用户输入、可能包含它们；
  * 用一个正文里几乎不可能出现的控制字符，就不需要再写转义逻辑。
  *
- * 新字段始终追加在末尾：5 段和 6 段的旧记录仍可读取，缺少的值分别按未安排时间、
- * 时间自动排序处理，用户已有存档不需要迁移。
+ * 新字段始终追加在末尾：5/6/7 段的旧记录仍可读取，缺少时间、排序与计时字段时，
+ * 分别按未排时间、自动排序、学习时间为 0 处理。旧完成状态保留。
  */
 private const val FIELD_SEPARATOR = "\u001F"
 private const val LEGACY_FIELD_COUNT = 5
 private const val TIME_FIELD_COUNT = 6
-private const val FIELD_COUNT = 7
+private const val ORDER_FIELD_COUNT = 7
+private const val FIELD_COUNT = 10
 
 internal data class StoredPlanTask(
     val epochDay: Long,
@@ -192,11 +198,14 @@ internal fun encodePlanTask(epochDay: Long, index: Int, task: PlanTask): String 
     task.supportingText,
     task.expectedStartMinute?.toString().orEmpty(),
     task.manualOrder?.toString().orEmpty(),
+    task.learningElapsedMillis.toString(),
+    task.learningStartedAtEpochMillis?.toString().orEmpty(),
+    if (task.hasLearningStarted) "1" else "0",
 ).joinToString(FIELD_SEPARATOR)
 
 internal fun decodePlanTask(encoded: String): StoredPlanTask? {
     val parts = encoded.split(FIELD_SEPARATOR)
-    if (parts.size !in setOf(LEGACY_FIELD_COUNT, TIME_FIELD_COUNT, FIELD_COUNT)) return null
+    if (parts.size !in setOf(LEGACY_FIELD_COUNT, TIME_FIELD_COUNT, ORDER_FIELD_COUNT, FIELD_COUNT)) return null
     val epochDay = parts[0].toLongOrNull() ?: return null
     val index = parts[1].toIntOrNull() ?: return null
     return StoredPlanTask(
@@ -210,6 +219,10 @@ internal fun decodePlanTask(encoded: String): StoredPlanTask? {
             expectedStartMinute = parts.getOrNull(5)?.toIntOrNull(),
             // 手动位置是最后追加的第 7 段；旧记录默认继续按时间自动排序。
             manualOrder = parts.getOrNull(6)?.toIntOrNull()?.takeIf { it >= 0 },
+            learningElapsedMillis = parts.getOrNull(7)?.toLongOrNull()?.coerceAtLeast(0L) ?: 0L,
+            learningStartedAtEpochMillis = parts.getOrNull(8)?.toLongOrNull()
+                ?.takeIf { it >= 0L && parts[2] != "1" },
+            hasLearningStarted = parts.getOrNull(9) == "1",
         ),
     )
 }

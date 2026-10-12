@@ -1,5 +1,7 @@
 package com.example.campuslife.ui.journal
 
+import com.example.campuslife.ui.theme.pressBounce
+import androidx.compose.ui.graphics.Color
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ScrollState
@@ -36,22 +38,22 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import com.example.campuslife.ui.components.ClaudeButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilterChip
+import com.example.campuslife.ui.components.ClaudeFilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import com.example.campuslife.ui.components.ClaudeIconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.example.campuslife.ui.components.ClaudeTextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -175,7 +177,7 @@ fun JournalScreen(
                 )
             },
             confirmButton = {
-                TextButton(
+                ClaudeTextButton(
                     onClick = {
                         onDeleteCategory(category.id)
                         deletingCategory = null
@@ -185,7 +187,7 @@ fun JournalScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { deletingCategory = null }) {
+                ClaudeTextButton(onClick = { deletingCategory = null }) {
                     Text("取消")
                 }
             },
@@ -206,9 +208,10 @@ fun JournalScreen(
         )
     }
 
+    // 透明底：页面下面垫的是导航层统一画的像素背景。
     Surface(
         modifier = modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background,
+        color = Color.Transparent,
     ) {
         LazyColumn(
             modifier = Modifier
@@ -449,7 +452,7 @@ private fun JournalEditorScreen(
             title = { Text("删除这篇日记？") },
             text = { Text("删除后无法恢复。") },
             confirmButton = {
-                TextButton(
+                ClaudeTextButton(
                     onClick = {
                         showDeleteConfirm = false
                         onDelete?.invoke()
@@ -459,7 +462,7 @@ private fun JournalEditorScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) {
+                ClaudeTextButton(onClick = { showDeleteConfirm = false }) {
                     Text("取消")
                 }
             },
@@ -488,14 +491,14 @@ private fun JournalEditorScreen(
                     .padding(horizontal = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = onBack) {
+                ClaudeIconButton(onClick = onBack) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "返回",
                     )
                 }
                 Spacer(modifier = Modifier.weight(1f))
-                FilterChip(
+                ClaudeFilterChip(
                     selected = autoSaveEnabled,
                     onClick = { onToggleAutoSave(!autoSaveEnabled) },
                     label = { Text("自动保存") },
@@ -507,7 +510,7 @@ private fun JournalEditorScreen(
                     ),
                 )
                 if (onDelete != null) {
-                    IconButton(onClick = { showDeleteConfirm = true }) {
+                    ClaudeIconButton(onClick = { showDeleteConfirm = true }) {
                         Icon(
                             imageVector = Icons.Filled.Delete,
                             contentDescription = "删除日记",
@@ -515,7 +518,7 @@ private fun JournalEditorScreen(
                         )
                     }
                 }
-                IconButton(
+                ClaudeIconButton(
                     onClick = { onSave(normalizedContent) },
                     enabled = normalizedContent.isNotEmpty(),
                 ) {
@@ -761,7 +764,7 @@ private fun CategoryNameDialog(
             )
         },
         confirmButton = {
-            TextButton(
+            ClaudeTextButton(
                 onClick = { onSave(normalizedName) },
                 enabled = normalizedName.isNotEmpty() && !isDuplicate,
             ) {
@@ -769,7 +772,7 @@ private fun CategoryNameDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            ClaudeTextButton(onClick = onDismiss) {
                 Text("取消")
             }
         },
@@ -824,17 +827,17 @@ private fun CategorySection(
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onBackground,
             )
-            TextButton(
+            ClaudeTextButton(
                 onClick = onAddEntryClick,
                 enabled = selectedCategory != null,
             ) {
                 Text("新建笔记")
             }
-            TextButton(onClick = onAddCategoryClick) {
+            ClaudeTextButton(onClick = onAddCategoryClick) {
                 Text("新建分类")
             }
             Box {
-                IconButton(
+                ClaudeIconButton(
                     onClick = { showManageMenu = true },
                     enabled = selectedCategory != null,
                 ) {
@@ -887,7 +890,7 @@ private fun CategorySection(
             ) {
                 categories.forEach { category ->
                     val isSelected = category.id == selectedCategory?.id
-                    FilterChip(
+                    ClaudeFilterChip(
                         selected = isSelected,
                         onClick = { onCategoryClick(category.id) },
                         label = { Text("${category.name} ${category.count}") },
@@ -932,7 +935,7 @@ private fun NoCategoryCard(
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
-            Button(
+            ClaudeButton(
                 onClick = onAddCategoryClick,
                 modifier = Modifier.padding(top = 16.dp),
             ) {
@@ -973,7 +976,7 @@ private fun EmptyCategoryCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            TextButton(onClick = onNewEntryClick) {
+            ClaudeTextButton(onClick = onNewEntryClick) {
                 Text("写一篇")
             }
         }
@@ -986,9 +989,11 @@ private fun JournalEntryCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
     Card(
         onClick = onClick,
-        modifier = modifier.fillMaxWidth(),
+        interactionSource = interactionSource,
+        modifier = modifier.fillMaxWidth().pressBounce(interactionSource, pressedScale = 0.97f),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),

@@ -9,7 +9,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
+import com.example.campuslife.ui.components.ClaudeButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -110,7 +110,7 @@ internal fun GachaReveal(
                 style = MaterialTheme.typography.labelMedium,
             )
         }
-        Button(
+        ClaudeButton(
             onClick = onDismiss,
             shape = RoundedCornerShape(12.dp),
         ) {

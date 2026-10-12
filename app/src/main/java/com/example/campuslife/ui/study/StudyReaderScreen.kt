@@ -45,14 +45,14 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import com.example.campuslife.ui.components.ClaudeIconButton
 import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.example.campuslife.ui.components.ClaudeTextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -78,7 +78,8 @@ fun StudyReaderScreen(
     modifier: Modifier = Modifier,
     onBackClick: () -> Unit = {},
     onProgressChange: (scrollY: Int, progress: Float) -> Unit = { _, _ -> },
-    onTaskToggle: (index: Int, checked: Boolean) -> Unit = { _, _ -> },
+    onVocabularyTableMaskChange: (String?) -> Unit = {},
+    onTaskCheckboxStateChange: (String?) -> Unit = {},
     previewContent: (@Composable () -> Unit)? = null,
 ) {
     val context = LocalContext.current
@@ -91,7 +92,16 @@ fun StudyReaderScreen(
     var externalUrl by remember { mutableStateOf<String?>(null) }
     var outline by remember(state.document.id) { mutableStateOf<List<StudyOutlineItem>>(emptyList()) }
     var showOutline by remember(state.document.id) { mutableStateOf(false) }
-    var vocabularyTableMaskEnabled by rememberSaveable(state.document.id) { mutableStateOf(false) }
+    // 有已保存的遮挡状态就直接按离开时的样子打开。这个值不另走 rememberSaveable：
+    // 资料自己的持久状态才是事实来源，避免退出阅读器后恢复出一个过期的开关值。
+    var vocabularyTableMaskEnabled by remember(state.document.id) {
+        mutableStateOf(state.document.vocabularyMask != null)
+    }
+    // 遮挡状态由 WebView 回报并立即落盘；这里只在进入某篇资料时取一次初值，
+    // 之后不再跟随落盘回流覆盖，否则用户当前正在翻的单元格会被覆盖。
+    var vocabularyTableMask by remember(state.document.id) { mutableStateOf(state.document.vocabularyMask) }
+    // 复选框状态同理：进入资料时取一次初值，之后由 WebView 回报并落盘，不跟随回流覆盖。
+    var taskCheckboxState by remember(state.document.id) { mutableStateOf(state.document.taskCheckboxState) }
 
     BackHandler(onBack = onBackClick)
 
@@ -111,7 +121,7 @@ fun StudyReaderScreen(
             title = { Text("打开外部链接？") },
             text = { Text(url) },
             confirmButton = {
-                TextButton(
+                ClaudeTextButton(
                     onClick = {
                         externalUrl = null
                         try {
@@ -125,7 +135,7 @@ fun StudyReaderScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { externalUrl = null }) {
+                ClaudeTextButton(onClick = { externalUrl = null }) {
                     Text("取消")
                 }
             },
@@ -195,8 +205,16 @@ fun StudyReaderScreen(
                         document = state.document,
                         textZoom = textZoom,
                         vocabularyTableMaskEnabled = vocabularyTableMaskEnabled,
-                        checkedTaskIndexes = state.checkedTaskIndexes,
-                        onTaskToggle = onTaskToggle,
+                        vocabularyTableMask = vocabularyTableMask,
+                        onVocabularyTableMaskChange = { reported ->
+                            vocabularyTableMask = reported
+                            onVocabularyTableMaskChange(reported)
+                        },
+                        taskCheckboxState = taskCheckboxState,
+                        onTaskCheckboxStateChange = { reported ->
+                            taskCheckboxState = reported
+                            onTaskCheckboxStateChange(reported)
+                        },
                         onWebViewReady = { view ->
                             webView = view
                             view?.setFindListener { activeMatchOrdinal, numberOfMatches, isDoneCounting ->
@@ -255,7 +273,7 @@ private fun ReaderToolbar(
             .padding(start = 4.dp, top = 6.dp, end = 4.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = onBackClick) {
+        ClaudeIconButton(onClick = onBackClick) {
             Icon(
                 imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
                 contentDescription = "返回资料库",
@@ -281,14 +299,14 @@ private fun ReaderToolbar(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        IconButton(onClick = onFindInDocumentClick) {
+        ClaudeIconButton(onClick = onFindInDocumentClick) {
             Icon(
                 imageVector = Icons.Outlined.Search,
                 contentDescription = "在文档中查找",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        IconButton(onClick = onOutlineClick) {
+        ClaudeIconButton(onClick = onOutlineClick) {
             Icon(
                 imageVector = Icons.AutoMirrored.Outlined.Toc,
                 contentDescription = "目录",
@@ -320,7 +338,7 @@ private fun ReaderToolbar(
             }
         }
         Box {
-            IconButton(onClick = { onShowSettingsChange(true) }) {
+            ClaudeIconButton(onClick = { onShowSettingsChange(true) }) {
                 Icon(
                     imageVector = Icons.Outlined.MoreVert,
                     contentDescription = "更多阅读选项",
@@ -379,13 +397,13 @@ private fun FindInDocumentBar(
                 null
             },
         )
-        IconButton(onClick = onPrevious, enabled = query.isNotBlank()) {
+        ClaudeIconButton(onClick = onPrevious, enabled = query.isNotBlank()) {
             Icon(Icons.Outlined.KeyboardArrowUp, contentDescription = "上一个匹配")
         }
-        IconButton(onClick = onNext, enabled = query.isNotBlank()) {
+        ClaudeIconButton(onClick = onNext, enabled = query.isNotBlank()) {
             Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = "下一个匹配")
         }
-        IconButton(onClick = onClose) {
+        ClaudeIconButton(onClick = onClose) {
             Icon(Icons.Outlined.Close, contentDescription = "关闭查找")
         }
     }
@@ -426,7 +444,7 @@ private fun OutlineDrawer(
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
-                    IconButton(onClick = onDismiss) {
+                    ClaudeIconButton(onClick = onDismiss) {
                         Icon(
                             imageVector = Icons.Outlined.Close,
                             contentDescription = "关闭目录",

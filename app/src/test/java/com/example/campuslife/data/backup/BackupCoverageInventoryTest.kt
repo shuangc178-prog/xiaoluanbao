@@ -78,9 +78,6 @@ class BackupCoverageInventoryTest {
 
         val backedUpFileStorageOwners = setOf(
             "com/example/campuslife/data/study/StudyImporter.kt",
-            // 任务勾选覆盖层要读正文里已勾上的项，因此也持有一次私有文件读取；
-            // 状态本身在 DataStore `study`，已进整包备份（见开发说明第 3 节）。
-            "com/example/campuslife/data/study/StudyStore.kt",
             "com/example/campuslife/ui/study/StudyDocumentRenderer.kt",
         )
 

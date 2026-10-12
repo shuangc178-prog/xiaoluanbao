@@ -4,8 +4,8 @@ import com.example.campuslife.data.card.CardCollectionStoredData
 import com.example.campuslife.data.checkin.CheckInStoredData
 import com.example.campuslife.data.journal.JournalData
 import com.example.campuslife.data.plan.DailyPlan
+import com.example.campuslife.data.plan.pauseLearning
 import com.example.campuslife.data.study.StudyDocument
-import com.example.campuslife.data.study.StudyTaskState
 
 /** 备份包里真正需要恢复的业务状态；WebDAV 账号与调度状态刻意不进入备份。 */
 internal data class AppBackupSnapshot(
@@ -15,9 +15,11 @@ internal data class AppBackupSnapshot(
     val cards: CardCollectionStoredData,
     val studyDocuments: List<StudyDocument>,
     val darkTheme: Boolean?,
-    /** 阅读器里任务列表的勾选覆盖层；导入副本本身不可写，这份状态同样要跟着备份走。 */
-    val studyTaskStates: List<StudyTaskState> = emptyList(),
 )
+
+/** 活动计时只计到备份生成时刻；此副本不改变本机的活动段。 */
+internal fun AppBackupSnapshot.pauseTaskTimers(atEpochMillis: Long): AppBackupSnapshot =
+    copy(plans = plans.map { it.pauseLearning(atEpochMillis) })
 
 data class BackupArchiveManifest(
     val formatVersion: Int,

@@ -2,6 +2,8 @@ package com.example.campuslife.ui.study
 
 import android.graphics.Color as AndroidColor
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
@@ -26,19 +28,35 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewClientCompat
+import com.example.campuslife.data.study.HASH_CHAR_COUNT
 import com.example.campuslife.data.study.StudyOutlineItem
 import com.example.campuslife.data.study.parseMarkdownOutline
+import com.example.campuslife.data.study.resolveImportedLocalImage
+import com.example.campuslife.data.study.taskItemHash
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.commonmark.Extension
 import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension
+import org.commonmark.ext.gfm.tables.TableBlock
+import org.commonmark.ext.gfm.tables.TableBody
+import org.commonmark.ext.gfm.tables.TableCell
+import org.commonmark.ext.gfm.tables.TableHead
+import org.commonmark.ext.gfm.tables.TableRow
 import org.commonmark.ext.gfm.tables.TablesExtension
+import org.commonmark.ext.task.list.items.TaskListItemMarker
 import org.commonmark.ext.task.list.items.TaskListItemsExtension
+import org.commonmark.node.Code
+import org.commonmark.node.HtmlBlock
+import org.commonmark.node.HtmlInline
+import org.commonmark.node.Image
+import org.commonmark.node.ListItem
+import org.commonmark.node.Node
+import org.commonmark.node.Text
 import org.commonmark.parser.Parser
+import org.commonmark.renderer.html.AttributeProvider
 import org.commonmark.renderer.html.HtmlRenderer
 import java.io.ByteArrayInputStream
 import java.io.File
-import java.util.Base64
 import kotlin.math.abs
 
 @Composable
@@ -46,54 +64,60 @@ internal fun StudyDocumentRenderer(
     document: StudyDocumentUiModel,
     textZoom: Int,
     vocabularyTableMaskEnabled: Boolean,
+    vocabularyTableMask: String?,
+    taskCheckboxState: String? = null,
     onWebViewReady: (WebView?) -> Unit,
     onProgressChange: (scrollY: Int, progress: Float) -> Unit,
     onExternalLink: (String) -> Unit,
     onOutlineChange: (List<StudyOutlineItem>) -> Unit = {},
-    checkedTaskIndexes: Set<Int> = emptySet(),
-    onTaskToggle: (index: Int, checked: Boolean) -> Unit = { _, _ -> },
+    onVocabularyTableMaskChange: (String?) -> Unit = {},
+    onTaskCheckboxStateChange: (String?) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val css = studyReaderCss(studyReaderPalette())
-    val currentOnTaskToggle by rememberUpdatedState(onTaskToggle)
+    // 遮挡状态不参与 produceState 的键：它每次落盘都会回流到这里，若作为键会让 WebView
+    // 重新建页，正在看的段落和已翻开的单元格都会一起丢掉。
+    val initialVocabularyTableMask = remember(document.id) {
+        vocabularyTableMask?.takeIf { document.supportsVocabularyTableMask }
+    }
+    // 复选框状态同理：勾选一次就重建一次 WebView 的话，滚动位置和展开状态全都会丢。
+    val initialTaskCheckboxState = remember(document.id) { taskCheckboxState }
+    val initialVocabularyTableMaskEnabled = vocabularyTableMaskEnabled && document.supportsVocabularyTableMask
     val rendered by produceState<RenderedStudyDocument?>(
         initialValue = null,
         document.id,
         document.snapshotId,
         document.relativePath,
         document.supportsVocabularyTableMask,
-        css,
     ) {
         value = withContext(Dispatchers.IO) {
             renderStoredDocument(
                 filesDirectory = context.filesDir,
                 document = document,
-                css = css,
                 enableVocabularyTableMask = document.supportsVocabularyTableMask,
+                vocabularyTableMaskState = initialVocabularyTableMask,
+                // 建页时就带上开关状态：页面脚本自己恢复，不依赖 onPageFinished 的先后顺序。
+                vocabularyTableMaskOn = initialVocabularyTableMaskEnabled,
+                taskCheckboxState = initialTaskCheckboxState,
             )
         }
     }
     var webView by remember(document.id) { mutableStateOf<WebView?>(null) }
-    // 页面里的脚本要等 DOM 就绪才能接状态；在那之前 evaluateJavascript 会打到空对象上，
-    // 所以由脚本用同一个桥回一个「就绪」信号，Compose 侧收到后再推一次。
-    var isReaderReady by remember(document.id) { mutableStateOf(false) }
     val currentVocabularyTableMaskEnabled by rememberUpdatedState(
         vocabularyTableMaskEnabled && document.supportsVocabularyTableMask,
     )
+    val currentOnVocabularyTableMaskChange by rememberUpdatedState(onVocabularyTableMaskChange)
+    // 只回报真正的变化，避免开启遮挡开关时的空状态白白写一次 DataStore。
+    val lastReportedMask = remember(document.id) { mutableStateOf<String?>(initialVocabularyTableMask) }
+    val currentOnTaskCheckboxStateChange by rememberUpdatedState(onTaskCheckboxStateChange)
+    val lastReportedTaskState = remember(document.id) { mutableStateOf(initialTaskCheckboxState) }
 
     LaunchedEffect(rendered?.outline) {
         onOutlineChange(rendered?.outline.orEmpty())
     }
 
-    LaunchedEffect(webView, vocabularyTableMaskEnabled, document.supportsVocabularyTableMask, isReaderReady) {
-        if (isReaderReady) webView?.setVocabularyTableMaskEnabled(currentVocabularyTableMaskEnabled)
-    }
-
-    // 勾选是「App 侧一份状态 + 正文里已勾上的项」合并出来的，改完要推回页面，
-    // 否则点一下会被下一次 recomposition 又画回旧状态。
-    LaunchedEffect(webView, checkedTaskIndexes, isReaderReady) {
-        if (isReaderReady) webView?.setCheckedTaskIndexes(checkedTaskIndexes)
+    LaunchedEffect(webView, vocabularyTableMaskEnabled, document.supportsVocabularyTableMask) {
+        webView?.setVocabularyTableMaskEnabled(currentVocabularyTableMaskEnabled)
     }
 
     DisposableEffect(document.id) {
@@ -133,14 +157,37 @@ internal fun StudyDocumentRenderer(
                             "/study/",
                             WebViewAssetLoader.InternalStoragePathHandler(viewContext, importsRoot),
                         )
+                        .addPathHandler(
+                            "/assets/",
+                            WebViewAssetLoader.AssetsPathHandler(viewContext),
+                        )
                         .build()
                     WebView(viewContext).apply {
-                        setBackgroundColor(AndroidColor.TRANSPARENT)
+                        // 阅读画布固定为 Claude Desktop Light，避免 WebView 建页时闪出系统白或 App 暗色。
+                        setBackgroundColor(AndroidColor.rgb(250, 249, 245))
+                        // 页面内容完全由本端生成，用户 Markdown 已做过 sanitize
+                        // （清除 script/iframe/事件处理器/javascript: 链接），
+                        // 因此这里开启 JS 仅用于本地 CodeMirror 高亮、注释浮卡、目录锚点
+                        // 与表格遮挡。所有脚本随 APK 打包，网络请求仍被完全阻断。
+                        addJavascriptInterface(
+                            StudyVocabularyTableMaskBridge { reported ->
+                                if (reported != lastReportedMask.value) {
+                                    lastReportedMask.value = reported
+                                    currentOnVocabularyTableMaskChange(reported)
+                                }
+                            },
+                            VOCABULARY_TABLE_MASK_BRIDGE_NAME,
+                        )
+                        addJavascriptInterface(
+                            StudyTaskCheckboxBridge { reported ->
+                                if (reported != lastReportedTaskState.value) {
+                                    lastReportedTaskState.value = reported
+                                    currentOnTaskCheckboxStateChange(reported)
+                                }
+                            },
+                            TASK_CHECKBOX_BRIDGE_NAME,
+                        )
                         settings.apply {
-                            // 页面内容完全由本端生成，用户 Markdown 已做过 sanitize
-                            // （清除 script/iframe/事件处理器/javascript: 链接），
-                            // 因此这里开启 JS 仅用于目录锚点、表格遮挡、注释展开与任务勾选，
-                            // 不引入任何外部脚本。
                             javaScriptEnabled = true
                             allowFileAccess = false
                             allowContentAccess = false
@@ -155,20 +202,14 @@ internal fun StudyDocumentRenderer(
                             displayZoomControls = false
                             this.textZoom = textZoom
                         }
-                        // 勾选回传只走这个接口，且暴露的方法只做一件事：把序号和状态交给
-                        // Compose 侧存覆盖层。不反射任何其他对象，避免 JNI 桥被页面滥用。
-                        addJavascriptInterface(
-                            StudyTaskBridge(
-                                onToggle = { index, checked -> currentOnTaskToggle(index, checked) },
-                                onReady = { isReaderReady = true },
-                            ),
-                            StudyTaskBridge.NAME,
-                        )
                         webViewClient = LocalDocumentWebViewClient(
                             assetLoader = assetLoader,
                             onExternalLink = onExternalLink,
                         ) {
-                            post { scrollTo(0, document.scrollY.coerceAtLeast(0)) }
+                            post {
+                                scrollTo(0, document.scrollY.coerceAtLeast(0))
+                                setVocabularyTableMaskEnabled(currentVocabularyTableMaskEnabled)
+                            }
                         }
                         val readerView = this
                         var lastReportedY = -1
@@ -261,8 +302,10 @@ private data class RenderedStudyDocument(
 private fun renderStoredDocument(
     filesDirectory: File,
     document: StudyDocumentUiModel,
-    css: String,
     enableVocabularyTableMask: Boolean,
+    vocabularyTableMaskState: String?,
+    vocabularyTableMaskOn: Boolean,
+    taskCheckboxState: String?,
 ): RenderedStudyDocument {
     val importsRoot = File(filesDirectory, "study_imports")
     val snapshotRoot = File(importsRoot, document.snapshotId)
@@ -278,7 +321,23 @@ private fun renderStoredDocument(
         .getOrElse { error ->
             return RenderedStudyDocument("", "", error = "读取失败：${error.message ?: "编码异常"}")
         }
-    val rendered = renderMarkdown(sourceText, css, enableVocabularyTableMask)
+    val rendered = renderMarkdown(
+        source = sourceText,
+        enableVocabularyTableMask = enableVocabularyTableMask,
+        vocabularyTableMaskState = vocabularyTableMaskState,
+        vocabularyTableMaskSourceHash = document.contentHash,
+        vocabularyTableMaskOn = vocabularyTableMaskOn,        taskCheckboxState = taskCheckboxState,
+        taskCheckboxSourceHash = document.contentHash,
+        imageUrlResolver = { imageSource ->
+            resolveImportedLocalImage(
+                snapshotRoot = snapshotRoot,
+                markdownFile = source,
+                markdownSource = sourceText,
+                imageSource = imageSource,
+            )?.let { imageFile -> importedResourceUrl(importsRoot, imageFile) }
+                ?: imageSource
+        },
+    )
     val parentPath = source.parentFile
         ?.relativeToOrNull(importsRoot)
         ?.invariantSeparatorsPath
@@ -306,35 +365,117 @@ internal data class RenderedMarkdown(
 
 internal fun renderMarkdown(
     source: String,
-    css: String,
+    css: String = "",
     enableVocabularyTableMask: Boolean = false,
+    vocabularyTableMaskState: String? = null,
+    vocabularyTableMaskSourceHash: String = "",
+    vocabularyTableMaskOn: Boolean = false,
+    taskCheckboxState: String? = null,
+    taskCheckboxSourceHash: String = "",
+    imageUrlResolver: (String) -> String = { it },
 ): RenderedMarkdown {
     val extensions: List<Extension> = listOf(
         TablesExtension.create(),
         StrikethroughExtension.create(),
         TaskListItemsExtension.create(),
     )
-    // 顺序是硬要求：Typora 的注释与颜色都是「高亮里塞一段 HTML 注释」，
-    // 必须在 sanitize（会清掉 `<!--...-->` 之外的裸标签，也会清掉带 on* 的属性）**之前**
-    // 换成安全的 span，否则注释正文会被当成普通 HTML 注释整条丢掉——那正是之前的行为。
+    // 注释必须先于通用 HTML 注释清理转换成 App 自己生成的安全标记；注释正文只以
+    // base64url 放进 data 属性，页面端再用 textContent 展示，不会执行其中的 HTML。
     val safeSource = substituteTyporaAnnotations(source)
         .let(::sanitizeSourceMarkup)
+        .replace(TYPORA_COMMENT, "")
         .replace(HIGHLIGHT_MARKER) { match -> "<mark>${match.groupValues[1]}</mark>" }
-        .replace(ROOT_RELATIVE_MARKDOWN_LINK) { match -> "${match.groupValues[1]}${match.groupValues[2]}" }
+        .replace(ROOT_RELATIVE_MARKDOWN_LINK) { match ->
+            // 图片的 `/assets/...` 必须保留到资源解析阶段，普通根路径链接仍沿用旧行为。
+            if (match.groupValues[1].startsWith('!')) {
+                match.value
+            } else {
+                "${match.groupValues[1]}${match.groupValues[2]}"
+            }
+        }
     val outline = parseMarkdownOutline(safeSource)
     val parser = Parser.builder().extensions(extensions).build()
     val renderer = HtmlRenderer.builder()
         .extensions(extensions)
         .sanitizeUrls(true)
+        .attributeProviderFactory { TaskMarkerAttributeProvider }
         .build()
-    val body = injectHeadingAnchors(renderer.render(parser.parse(safeSource)), outline)
-    val vocabularyMaskAssets = if (enableVocabularyTableMask) VOCABULARY_TABLE_MASK_ASSETS else ""
+    val documentNode = parser.parse(safeSource)
+    rewriteImageSources(documentNode, imageUrlResolver)
+    val body = injectHeadingAnchors(renderer.render(documentNode), outline)
+    val vocabularyMaskAssets = if (enableVocabularyTableMask) {
+        vocabularyTableMaskAssets(
+            sourceHash = vocabularyTableMaskSourceHash,
+            storedState = vocabularyTableMaskState,
+            enabled = vocabularyTableMaskOn,
+        )
+    } else {
+        ""
+    }
+    val taskCheckboxAssets = taskCheckboxAssets(
+        sourceHash = taskCheckboxSourceHash,
+        storedState = taskCheckboxState,
+    )
     val html = """
         <!doctype html>
-        <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">$css$vocabularyMaskAssets$READER_INTERACTIVITY_ASSETS</head>
-        <body>$body</body></html>
+        <html lang="zh-CN">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <link rel="stylesheet" href="$STUDY_READER_ASSET_BASE_URL/claude-desktop-light.css">
+            $css
+            $vocabularyMaskAssets
+            $taskCheckboxAssets
+            <script defer src="$STUDY_READER_ASSET_BASE_URL/codemirror/codemirror.min.js"></script>
+            <script defer src="$STUDY_READER_ASSET_BASE_URL/codemirror/runmode.min.js"></script>
+            <script defer src="$STUDY_READER_ASSET_BASE_URL/codemirror/mode.min.js"></script>
+            <script defer src="$STUDY_READER_ASSET_BASE_URL/study-reader.js"></script>
+          </head>
+          <body><main id="write">$body</main></body>
+        </html>
     """.trimIndent()
     return RenderedMarkdown(html = html, outline = outline)
+}
+
+private fun importedResourceUrl(importsRoot: File, resource: File): String? {
+    val relativePath = resource.relativeToOrNull(importsRoot)
+        ?.invariantSeparatorsPath
+        ?.split('/')
+        ?.filter(String::isNotBlank)
+        ?.joinToString("/") { segment -> Uri.encode(segment) }
+        ?.takeIf(String::isNotEmpty)
+        ?: return null
+    return "https://${WebViewAssetLoader.DEFAULT_DOMAIN}/study/$relativePath"
+}
+
+private fun rewriteImageSources(node: Node, resolver: (String) -> String) {
+    when (node) {
+        is Image -> node.destination = resolver(node.destination)
+        is HtmlInline -> node.literal = rewriteRawHtmlImageSources(node.literal, resolver)
+        is HtmlBlock -> node.literal = rewriteRawHtmlImageSources(node.literal, resolver)
+    }
+
+    var child = node.firstChild
+    while (child != null) {
+        rewriteImageSources(child, resolver)
+        child = child.next
+    }
+}
+
+private fun rewriteRawHtmlImageSources(
+    html: String,
+    resolver: (String) -> String,
+): String = RAW_HTML_IMAGE_SOURCE.replace(html) { match ->
+    val quote = match.groupValues[2]
+    val source = match.groupValues[3].ifEmpty { match.groupValues[4] }
+    val resolved = resolver(source)
+    if (resolved == source) {
+        match.value
+    } else if (quote.isNotEmpty()) {
+        "${match.groupValues[1]}$quote$resolved$quote"
+    } else {
+        "${match.groupValues[1]}$resolved"
+    }
 }
 
 /**
@@ -364,84 +505,6 @@ private fun sanitizeSourceMarkup(source: String): String = source
         "${match.groupValues[1]}=${match.groupValues[2]}#${match.groupValues[2]}"
     }
 
-/**
- * 勾选回传的 JNI 桥。
- *
- * 只暴露一个方法，方法体只把 `(序号, 是否勾上)` 交给 Compose 侧，不暴露 WebView、
- * 不做反射、不读文件；即使页面脚本被注入，能做的也只有「翻一个任务」。
- */
-internal class StudyTaskBridge(
-    private val onToggle: (index: Int, checked: Boolean) -> Unit,
-    private val onReady: () -> Unit,
-) {
-    @android.webkit.JavascriptInterface
-    fun onTaskToggled(index: Int, checked: Boolean) {
-        if (index >= 0) onToggle(index, checked)
-    }
-
-    /** 页面脚本绑定完成后回一个信号，Compose 侧据此推首次状态。 */
-    @android.webkit.JavascriptInterface
-    fun onReaderReady() {
-        onReady()
-    }
-
-    companion object {
-        const val NAME = "studyReaderBridge"
-    }
-}
-
-/**
- * 把 Typora 的注释与颜色标记换成安全的 HTML 片段。
- *
- * 两种标记都长在「高亮」里：
- * - 注释 `==文字<!--typora-annotation-v1-<id>-<base64url 正文>-->==`
- * - 颜色 `==文字<!--typora-color-v1-<id>-<#rrggbb|none>-<none>-->==`
- *
- * 注释正文是用户手写的备注，必须解出来显示（点高亮展开）；颜色取值只在形如
- * `#rrggbb` 时才落成行内样式，其它一律忽略，避免把任意 CSS 引进文档。
- * 单独占一行的注释（外面没有高亮）也一并保住，不会变成看不见的注释节点。
- */
-private fun substituteTyporaAnnotations(source: String): String {
-    val noteSpans = TYPORA_ANNOTATION_HIGHLIGHT.replace(source) { match ->
-        val note = decodeNotePayload(match.groupValues[3])
-        if (note.isEmpty()) {
-            "<mark>${match.groupValues[1]}</mark>"
-        } else {
-            // 备注正文再次用 base64url 放进属性里：commonmark 会把内联 HTML 当文本再转义一遍，
-            // 直接写中文或引号会被 `&amp;` 二次转义，页面读到的就是坏文本。
-            "<span class=\"study-note\">${match.groupValues[1]}</span>" +
-                "<span class=\"study-note-text\" data-study-note=\"${encodeNotePayload(note)}\"></span>"
-        }
-    }
-    val colorSpans = TYPORA_COLOR_HIGHLIGHT.replace(noteSpans) { match ->
-        val color = match.groupValues[3]
-        if (SAFE_COLOR.matches(color)) {
-            val style = " style=\"color: $color\""
-            "<mark$style>${match.groupValues[1]}</mark>"
-        } else {
-            "<mark>${match.groupValues[1]}</mark>"
-        }
-    }
-    return TYPORA_ORPHAN_ANNOTATION.replace(colorSpans) { match ->
-        // 这个 pattern 只有两个捕获组：1 = 注释 id，2 = base64url 正文。
-        val note = decodeNotePayload(match.groupValues[2])
-        if (note.isEmpty()) {
-            ""
-        } else {
-            "<span class=\"study-note-orphan\" data-study-note=\"${encodeNotePayload(note)}\"></span>"
-        }
-    }
-}
-
-private fun decodeNotePayload(payload: String): String = runCatching {
-    val normalized = payload.replace('-', '+').replace('_', '/')
-    val padded = normalized + "=".repeat((4 - normalized.length % 4) % 4)
-    String(Base64.getDecoder().decode(padded), Charsets.UTF_8)
-}.getOrDefault("")
-
-private fun encodeNotePayload(value: String): String =
-    Base64.getUrlEncoder().withoutPadding().encodeToString(value.toByteArray(Charsets.UTF_8))
-
 private fun WebView.setVocabularyTableMaskEnabled(enabled: Boolean) {
     evaluateJavascript(
         "window.studyVocabularyTableMask && " +
@@ -450,132 +513,264 @@ private fun WebView.setVocabularyTableMaskEnabled(enabled: Boolean) {
     )
 }
 
-private fun WebView.setCheckedTaskIndexes(indexes: Set<Int>) {
-    val encoded = indexes.sorted().joinToString(",")
-    evaluateJavascript(
-        "window.studyReaderTasks && window.studyReaderTasks.setChecked([$encoded]);",
-        null,
+/**
+ * 遮挡样式、状态与脚本。样式直接内联（必须在建页时就在，否则会闪一下未遮挡的表格），
+ * 脚本与复选框一样放 assets 里由 WebView 通过 assetLoader 取：Kotlin 原始字符串会把
+ * `$名称` / `${...}` 当成自己的插值先吃掉，写在字符串常量里迟早会写出与页面不一致的脚本。
+ *
+ * [storedState] 是用户上次离开这篇资料时的遮挡状态，由表格和列的位置还原，并按
+ * [sourceHash] 校验资料内容没有变过；页面里每次遮挡变化都会回传到 Kotlin 侧落盘，
+ * 退出笔记再打开就还是用户翻开的那些单元格。
+ */
+private fun vocabularyTableMaskAssets(
+    sourceHash: String,
+    storedState: String?,
+    enabled: Boolean,
+): String = VOCABULARY_TABLE_MASK_ASSETS
+    .replace(
+        MASK_INITIAL_STATE_PLACEHOLDER,
+        "{\"bridge\":${encodeJsonString(VOCABULARY_TABLE_MASK_BRIDGE_NAME)}," +
+            "\"enabled\":${enabled.toString()}," +
+            "\"sourceHash\":${encodeJsonString(sourceHash)}," +
+            "\"storedState\":${encodeJsonString(storedState)}}"
+            .replace("<", "\\u003c"),
     )
+
+/**
+ * 复选框脚本与样式随资料一起注入。[storedState] 是用户上次离开这篇资料时的勾选状态，
+ * 页面按“表格与行位置 + 该行文字哈希”逐条恢复，并按 [sourceHash] 校验资料没有被换过；
+ * 每次勾选都会合并后回传到 Kotlin 侧落盘，资料的 Markdown 快照始终只读。
+ *
+ * 页面脚本放在 assets 里而不是本文件的字符串常量里：它同时被单元测试直接读取校验，
+ * 也避免在 Kotlin 里把整段 JavaScript 写成转义字符串。状态传递仍走
+ * `<script type="application/json">`，只转义 `<`，不会被资料内容影响。
+ */
+/**
+ * 把 Typora 表格行任务升格成可点的任务单元格。
+ *
+ * 判定口径与 Typora 的表格任务扩展严格一致：单元格文字 trim 后完全等于 `[ ]` 或
+ * `[x]`/`[X]` 才算任务，`[ ] 买牛奶` 这种带内容的单元格一律按普通文字渲染——否则
+ * 会把用户真正写下的内容吃掉。升级后的单元格只多一个文字哈希属性，勾选与否由页面
+ * 脚本按用户状态决定，Markdown 源保持原样。
+ *
+ * 这里走属性提供器而不是自定义渲染器：单元格的其余渲染（对齐、行内节点）仍由
+ * commonmark 自己完成，只往命中任务的单元格上追加属性，回归风险最小。
+ */
+private object TaskMarkerAttributeProvider : AttributeProvider {
+    override fun setAttributes(node: Node, tagName: String, attributes: MutableMap<String, String>) {
+        when {
+            tagName == "td" && node is TableCell -> decorateTableTaskCell(node, attributes)
+            tagName == "input" && node is TaskListItemMarker -> decorateListTaskInput(node, attributes)
+            tagName == "li" && node is ListItem -> decorateListTaskItem(node, attributes)
+        }
+    }
+
+    private fun decorateTableTaskCell(
+        cell: TableCell,
+        attributes: MutableMap<String, String>,
+    ) {
+        val marker = nodeTaskMarker(cell) ?: return
+        if (!isTyporaTableTaskCell(cell, marker)) return
+        val checked = marker.trim().equals("[x]", ignoreCase = true)
+        addCssClass(attributes, TASK_CELL_CLASS)
+        attributes[TASK_HASH_ATTRIBUTE] = taskItemHash(tableTaskRowText(cell))
+        attributes[TASK_SOURCE_CHECKED_ATTRIBUTE] = checked.toString()
+        attributes["aria-checked"] = checked.toString()
+        attributes["aria-label"] = "切换该行任务状态"
+        attributes["role"] = "checkbox"
+        attributes["tabindex"] = "0"
+    }
+
+    private fun decorateListTaskInput(
+        marker: TaskListItemMarker,
+        attributes: MutableMap<String, String>,
+    ) {
+        addCssClass(attributes, TASK_LIST_CHECKBOX_CLASS)
+        attributes.remove("disabled")
+        attributes[TASK_HASH_ATTRIBUTE] = taskItemHash(listTaskItemText(marker))
+        attributes[TASK_SOURCE_CHECKED_ATTRIBUTE] = marker.isChecked.toString()
+        attributes["aria-label"] = "切换该条任务状态"
+    }
+
+    private fun decorateListTaskItem(
+        item: ListItem,
+        attributes: MutableMap<String, String>,
+    ) {
+        val marker = item.firstChild as? TaskListItemMarker ?: return
+        addCssClass(attributes, TASK_LIST_ITEM_CLASS)
+        if (marker.isChecked) addCssClass(attributes, TASK_DONE_CLASS)
+    }
+}
+
+/** 只复现 Typora 扩展定义的表格任务：首列表头为“完成”，任务格也必须位于首列。 */
+private fun isTyporaTableTaskCell(cell: TableCell, marker: String): Boolean {
+    if (cell.isHeader || !isTaskMarkerText(marker)) return false
+    val row = cell.parent as? TableRow ?: return false
+    if (row.firstChild !== cell) return false
+    val body = row.parent as? TableBody ?: return false
+    val table = body.parent as? TableBlock ?: return false
+    val head = table.firstChild as? TableHead ?: return false
+    val headerRow = head.firstChild as? TableRow ?: return false
+    val headerCell = headerRow.firstChild as? TableCell ?: return false
+    return nodeVisibleText(headerCell).trim() == TASK_TABLE_HEADER
+}
+
+/** 表格任务用同一行的正文做哈希，不能让每一行都只得到 `[ ]` 这个相同哈希。 */
+private fun tableTaskRowText(taskCell: TableCell): String {
+    val values = mutableListOf<String>()
+    var sibling = taskCell.next
+    while (sibling != null) {
+        if (sibling is TableCell) values += nodeVisibleText(sibling)
+        sibling = sibling.next
+    }
+    return values.joinToString(TASK_TEXT_SEPARATOR)
+}
+
+/** TaskListItemsExtension 会把 marker 放在 ListItem 的第一个孩子，正文紧随其后。 */
+private fun listTaskItemText(marker: TaskListItemMarker): String = marker.next
+    ?.let(::nodeVisibleText)
+    .orEmpty()
+
+private fun nodeVisibleText(root: Node): String {
+    val text = StringBuilder()
+    fun appendChildren(parent: Node) {
+        var child = parent.firstChild
+        while (child != null) {
+            when (child) {
+                is Text -> text.append(child.literal)
+                is Code -> text.append(child.literal)
+                else -> appendChildren(child)
+            }
+            child = child.next
+        }
+    }
+    appendChildren(root)
+    return text.toString()
+}
+
+private fun addCssClass(attributes: MutableMap<String, String>, className: String) {
+    val classes = attributes[TASK_CELL_CLASS_ATTRIBUTE]
+        .orEmpty()
+        .split(' ')
+        .filter(String::isNotBlank)
+        .toMutableSet()
+    classes += className
+    attributes[TASK_CELL_CLASS_ATTRIBUTE] = classes.joinToString(" ")
 }
 
 /**
- * 阅读器的交互脚本：注释展开、任务勾选回传、备注正文落地。
- *
- * 备注正文不直接写进 HTML 属性以外的位置，由脚本读到 `data-study-note` 后再插进 DOM，
- * 这样正文里出现的 `<`、`&` 不会破坏页面结构。
+ * 单元格可供识别为任务标记的文字。单元格里除了纯文字还有别的行内节点（加粗、链接、
+ * 行内代码等）时返回 null——它不是一条任务标记。
  */
-internal val READER_INTERACTIVITY_ASSETS = """
-    <script id="study-reader-interactivity-script">
-      (() => {
-        const NOTE = "data-study-note";
-        const OPEN = "study-note-open";
-        const CHECKBOX = 'input[type="checkbox"]';
-        const DONE_CLASS = "task-list-done";
-        const BRIDGE = "studyReaderBridge";
-        let checkboxes = [];
-
-        const decodeNote = (encoded) => {
-          try {
-            const binary = atob(encoded);
-            const bytes = new Uint8Array(binary.length);
-            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-            return new TextDecoder("utf-8").decode(bytes);
-          } catch (error) {
-            return "";
-          }
-        };
-
-        const attachNotes = () => {
-          document.querySelectorAll("[" + NOTE + "]").forEach((element) => {
-            if (element.dataset.studyNoteBound) return;
-            element.dataset.studyNoteBound = "1";
-            const text = decodeNote(element.getAttribute(NOTE));
-            if (!text) return;
-            if (element.classList.contains("study-note")) {
-              element.insertAdjacentHTML(
-                "afterend",
-                '<div class="study-note-text">' + text.replace(/&/g, "&amp;").replace(/</g, "&lt;") + "</div>"
-              );
-            } else {
-              element.textContent = text;
-            }
-          });
-        };
-
-        const applyDone = (box, done) => {
-          box.checked = done;
-          const item = box.closest("li");
-          if (!item) return;
-          // commonmark 对紧凑列表不写 task-list-item 类，这里补上，
-          // 完成行的底色与删除线才有一致的落点。
-          item.classList.add("task-list-item");
-          item.classList.toggle(DONE_CLASS, done);
-        };
-
-        const indexOfBox = (box) => checkboxes.indexOf(box);
-
-        const setChecked = (indexes) => {
-          const done = new Set(indexes || []);
-          checkboxes.forEach((box, index) => applyDone(box, done.has(index)));
-        };
-
-        const bindTasks = () => {
-          checkboxes = Array.from(document.querySelectorAll(CHECKBOX));
-          checkboxes.forEach((box, index) => {
-            box.disabled = false;
-            box.removeAttribute("disabled");
-            if (box.dataset.studyTaskBound) return;
-            box.dataset.studyTaskBound = "1";
-            box.addEventListener("click", (event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              const next = !box.checked;
-              applyDone(box, next);
-              const bridge = window[BRIDGE];
-              if (bridge && typeof bridge.onTaskToggled === "function") {
-                bridge.onTaskToggled(indexOfBox(box), next);
-              }
-            }, true);
-          });
-          document.querySelectorAll("li." + DONE_CLASS).forEach((item) => {
-            const box = item.querySelector(CHECKBOX);
-            if (box && !checkboxes.includes(box)) item.classList.remove(DONE_CLASS);
-          });
-        };
-
-        document.addEventListener("click", (event) => {
-          const target = event.target;
-          if (!(target instanceof Element)) return;
-          const note = target.closest(".study-note");
-          if (!note) return;
-          const text = note.nextElementSibling;
-          if (text && text.classList.contains("study-note-text")) {
-            text.classList.toggle(OPEN);
-            event.preventDefault();
-            event.stopPropagation();
-          }
-        }, true);
-
-        window.studyReaderTasks = { setChecked };
-
-        const init = () => {
-          attachNotes();
-          bindTasks();
-          const bridge = window[BRIDGE];
-          if (bridge && typeof bridge.onReaderReady === "function") bridge.onReaderReady();
-        };
-        // 脚本在 head 里，正常晚于 DOM 就绪；但 WebView 复用页面时可能已经 readyState=complete，
-        // 两条路都要覆盖，否则注释和复选框永远绑不上事件。
-        if (document.readyState === "loading") {
-          document.addEventListener("DOMContentLoaded", init, { once: true });
-        } else {
-          init();
+private fun nodeTaskMarker(node: TableCell): String? {
+    val text = StringBuilder()
+    var child = node.firstChild
+    while (child != null) {
+        if (child is Text) {
+            text.append(child.literal)
+        } else if (child !is HtmlInline) {
+            return null
         }
-      })();
-    </script>
+        child = child.next
+    }
+    return text.toString()
+}
+
+private fun isTaskMarkerText(text: String): Boolean = when (text.trim()) {
+    "[ ]", "[x]", "[X]" -> true
+    else -> false
+}
+
+private const val TASK_CELL_CLASS = "xlb-task-cell"
+private const val TASK_LIST_CHECKBOX_CLASS = "xlb-task-list-checkbox"
+private const val TASK_LIST_ITEM_CLASS = "xlb-task-list-item"
+private const val TASK_DONE_CLASS = "xlb-task-done"
+private const val TASK_CELL_CLASS_ATTRIBUTE = "class"
+private const val TASK_HASH_ATTRIBUTE = "data-xlb-task-hash"
+private const val TASK_SOURCE_CHECKED_ATTRIBUTE = "data-xlb-task-source-checked"
+private const val TASK_TABLE_HEADER = "完成"
+private const val TASK_TEXT_SEPARATOR = "\u001F"
+
+private fun taskCheckboxAssets(
+    sourceHash: String,
+    storedState: String?,
+): String = TASK_CHECKBOX_ASSETS
+    .replace(
+        TASK_CHECKBOX_STATE_PLACEHOLDER,
+        "{\"sourceHash\":${encodeJsonString(sourceHash.take(HASH_CHAR_COUNT))}," +
+            "\"storedState\":${encodeJsonString(storedState)}}"
+            .replace("<", "\\u003c"),
+    )
+
+/** WebView 把勾选状态交回 Kotlin 的唯一入口；只在真实变化时被调用。 */
+private class StudyTaskCheckboxBridge(
+    private val onStateChanged: (String?) -> Unit,
+) {
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    @android.webkit.JavascriptInterface
+    fun onTaskStateChanged(encoded: String?) {
+        val normalized = encoded?.takeIf(String::isNotBlank)
+        mainHandler.post { onStateChanged(normalized) }
+    }
+}
+
+private fun encodeJsonString(value: String?): String {
+    if (value == null) return "null"
+    val builder = StringBuilder(value.length + 2)
+    builder.append('"')
+    value.forEach { character ->
+        when (character) {
+            '"' -> builder.append("\\\"")
+            '\\' -> builder.append("\\\\")
+            '\n' -> builder.append("\\n")
+            '\r' -> builder.append("\\r")
+            '\t' -> builder.append("\\t")
+            '\b' -> builder.append("\\b")
+            '\u000C' -> builder.append("\\f")
+            // U+2028 / U+2029 在 JS 里是换行符，会截断字符串字面量。
+            '\u2028', '\u2029' -> builder.append("\\u%04x".format(character.code))
+            else -> if (character < ' ') {
+                builder.append("\\u%04x".format(character.code))
+            } else {
+                builder.append(character)
+            }
+        }
+    }
+    builder.append('"')
+    return builder.toString()
+}
+
+/** WebView 把遮挡状态交回 Kotlin 的唯一入口；只在真实变化时被调用。 */
+private class StudyVocabularyTableMaskBridge(
+    private val onStateChanged: (String?) -> Unit,
+) {
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    @android.webkit.JavascriptInterface
+    fun onMaskStateChanged(encoded: String?) {
+        val normalized = encoded?.takeIf(String::isNotBlank)
+        mainHandler.post { onStateChanged(normalized) }
+    }
+}
+
+private const val MASK_INITIAL_STATE_PLACEHOLDER = "__STUDY_MASK_INITIAL_STATE__"
+private const val VOCABULARY_TABLE_MASK_BRIDGE_NAME = "xlbStudyVocabularyMask"
+private const val TASK_CHECKBOX_BRIDGE_NAME = "xlbStudyTaskCheckbox"
+private const val TASK_CHECKBOX_STATE_PLACEHOLDER = "__STUDY_TASK_CHECKBOX_STATE__"
+
+/**
+ * 样式和脚本必须让 WebViewAssetLoader 从 APK assets 读取。Android 真机并不存在
+ * `src/main/assets/...` 这类源码目录，不能在运行时用 java.io.File 探测它们。
+ */
+private val TASK_CHECKBOX_ASSETS = """
+    <link rel="stylesheet" id="study-task-checkbox-style" href="$STUDY_READER_ASSET_BASE_URL/task-checkbox.css">
+    <script type="application/json" id="study-task-checkbox-initial-state">$TASK_CHECKBOX_STATE_PLACEHOLDER</script>
+    <script defer data-study-task-bridge="$TASK_CHECKBOX_BRIDGE_NAME" src="$STUDY_READER_ASSET_BASE_URL/task-checkbox.js"></script>
 """.trimIndent()
 
 internal val VOCABULARY_TABLE_MASK_ASSETS = """
+    <script type="application/json" id="study-vocabulary-mask-initial-state">$MASK_INITIAL_STATE_PLACEHOLDER</script>
     <style id="study-vocabulary-table-mask-style">
       html.study-vocabulary-mask-enabled table tr:first-child > th,
       html.study-vocabulary-mask-enabled table tr:first-child > td { cursor: pointer; }
@@ -591,72 +786,14 @@ internal val VOCABULARY_TABLE_MASK_ASSETS = """
         inset: 0;
         z-index: 2147483647;
         display: block;
-        /* 与正文底色一致，遮罩看起来才是「空白」而不是一块白纸 */
-        background-color: var(--study-canvas, #fff);
+        background-color: var(--claude-canvas, #faf9f5);
         opacity: 1;
       }
       table.study-vocabulary-mask-active .study-vocabulary-mask-cell.study-vocabulary-mask-revealed::after {
         display: none;
       }
     </style>
-    <script id="study-vocabulary-table-mask-script">
-      (() => {
-        const ACTIVE = "study-vocabulary-mask-active";
-        const MASKED = "study-vocabulary-mask-cell";
-        const REVEALED = "study-vocabulary-mask-revealed";
-        const ENABLED = "study-vocabulary-mask-enabled";
-        let enabled = false;
-        let selectedTable = null;
-        let selectedColumn = -1;
-
-        const clearSelection = () => {
-          document.querySelectorAll("table." + ACTIVE).forEach((table) => table.classList.remove(ACTIVE));
-          document.querySelectorAll("." + MASKED).forEach((cell) => {
-            cell.classList.remove(MASKED, REVEALED);
-          });
-          selectedTable = null;
-          selectedColumn = -1;
-        };
-
-        const selectColumn = (table, columnIndex) => {
-          clearSelection();
-          selectedTable = table;
-          selectedColumn = columnIndex;
-          table.classList.add(ACTIVE);
-          Array.from(table.rows).slice(1).forEach((row) => {
-            const cell = Array.from(row.cells).find((candidate) => candidate.cellIndex === columnIndex);
-            if (cell) cell.classList.add(MASKED);
-          });
-        };
-
-        window.studyVocabularyTableMask = {
-          setEnabled(nextEnabled) {
-            enabled = Boolean(nextEnabled);
-            clearSelection();
-            document.documentElement.classList.toggle(ENABLED, enabled);
-          },
-        };
-
-        document.addEventListener("click", (event) => {
-          if (!enabled || !(event.target instanceof Element)) return;
-          const cell = event.target.closest("th, td");
-          const table = cell ? cell.closest("table") : null;
-          if (!cell || !table) return;
-
-          const rowIndex = Array.from(table.rows).indexOf(cell.parentElement);
-          if (rowIndex === 0) {
-            selectColumn(table, cell.cellIndex);
-          } else if (table === selectedTable && cell.cellIndex === selectedColumn) {
-            cell.classList.toggle(REVEALED);
-          } else {
-            return;
-          }
-
-          event.preventDefault();
-          event.stopPropagation();
-        }, true);
-      })();
-    </script>
+    <script defer data-study-mask-bridge="$VOCABULARY_TABLE_MASK_BRIDGE_NAME" src="$STUDY_READER_ASSET_BASE_URL/vocabulary-table-mask.js"></script>
 """.trimIndent()
 
 private val DANGEROUS_BLOCK = Regex(
@@ -665,20 +802,12 @@ private val DANGEROUS_BLOCK = Regex(
 private val DANGEROUS_SINGLE_TAG = Regex("(?is)<(script|iframe|object|embed|form|base|meta)[^>]*?/?>")
 private val INLINE_EVENT_HANDLER = Regex("(?is)\\s+on[a-z]+\\s*=\\s*([\"']).*?\\1")
 private val JAVASCRIPT_URL = Regex("(?is)(href|src)\\s*=\\s*([\"'])\\s*javascript:[^\"']*\\2")
+private val TYPORA_COMMENT = Regex("(?is)<!--\\s*typora-(?:color|annotation)-v1.*?-->")
 private val HIGHLIGHT_MARKER = Regex("==([^=\\n]+)==")
 private val ROOT_RELATIVE_MARKDOWN_LINK = Regex("(!?\\[[^]]*]\\()/(?!/)([^)]+\\))")
+private val RAW_HTML_IMAGE_SOURCE = Regex(
+    """(?is)(<img\b[^>]*?\s+src\s*=\s*)(?:([\"'])(.*?)\2|([^\s\"'=<>`]+))""",
+)
 
-/**
- * 高亮里的 Typora 注释。第 3 组是 base64url 正文（没有 `=` 填充），字符集按 URL-safe 取。
- * 正文里不会出现 `-`，所以用 `-` 作分隔符不会误切；结尾的 `-->` 必须带上，避免吃掉后面的内容。
- */
-private val TYPORA_ANNOTATION_HIGHLIGHT = Regex(
-    "(?is)==([^=\\n]*?)<!--\\s*typora-annotation-v1-([0-9a-f]+)-([A-Za-z0-9+/]*)-*\\s*-->\\s*==",
-)
-private val TYPORA_COLOR_HIGHLIGHT = Regex(
-    "(?is)==([^=\\n]*?)<!--\\s*typora-color-v1-([0-9a-f]+)-([#0-9a-zA-Z]+)-[0-9a-zA-Z]+\\s*-->\\s*==",
-)
-private val TYPORA_ORPHAN_ANNOTATION = Regex(
-    "<!--\\s*typora-annotation-v1-([0-9a-f]+)-([A-Za-z0-9+/]*)-*\\s*-->(?!\\s*==)",
-)
-private val SAFE_COLOR = Regex("^#[0-9a-fA-F]{3,8}$")
+private const val STUDY_READER_ASSET_BASE_URL =
+    "https://appassets.androidplatform.net/assets/study_reader"

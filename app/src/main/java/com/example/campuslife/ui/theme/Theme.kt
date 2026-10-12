@@ -1,10 +1,15 @@
 package com.example.campuslife.ui.theme
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 
 private val LightColors = lightColorScheme(
@@ -73,6 +78,7 @@ private val DarkColors = darkColorScheme(
     onErrorContainer = ClaudeDarkDanger,
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CampusLifeTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
@@ -82,7 +88,14 @@ fun CampusLifeTheme(
         MaterialTheme(
             colorScheme = if (darkTheme) DarkColors else LightColors,
             typography = ClaudeTypography,
-            content = content,
-        )
+        ) {
+            // 全局按压手感：普通 clickable 换成暖光 + 微缩回弹，Material 组件的水波加深一点。
+            val glow = MaterialTheme.claude.accent
+            CompositionLocalProvider(
+                LocalIndication provides remember(glow) { ClaudePressIndication(glow) },
+                LocalRippleConfiguration provides ClaudeRippleConfiguration,
+                content = content,
+            )
+        }
     }
 }

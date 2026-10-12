@@ -10,6 +10,8 @@ captures/
 
 # Codex / 本机工作区：自动备份、设备验证数据、截图和过程稿不进入版本库。
 .codex-backups/
+.tmp-*/
+previews/
 .workbuddy/*
 
 # 卡牌的正式设计源、同步脚本和清单需要跟随源码；预览与生成过程稿继续忽略。
@@ -27,6 +29,15 @@ captures/
 *.log
 .DS_Store
 Thumbs.db
+node_modules/
+__pycache__/
+*.pyc
+*.apk
+*.aab
+*.xlbak
+.env
+.env.*
+!.env.example
 
 # release 签名凭据：绝不能进仓库。
 # keystore 丢了 = 永久无法更新已上架应用；密码泄露 = 别人能冒名发布你的更新。

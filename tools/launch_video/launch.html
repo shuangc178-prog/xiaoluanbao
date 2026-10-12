@@ -1,0 +1,956 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>小卵包 · 启动视频</title>
+<!--
+  四段启动视频的逐帧源。每一帧都是时间 t 的纯函数：window.__seek(t) 把画面摆到 t 秒，
+  render.mjs 逐帧截图后交给 ffmpeg 拼成视频。
+
+  ?s=1..4      选择场景（1 本日计划 / 2 日记随想 / 3 学习 / 4 统计）
+  &play        浏览器里实时循环预览
+  &t=1.5       定格在某一时刻
+-->
+<style>
+  @font-face { font-family: "LSerif"; src: local("Noto Serif SC"), url("file:///C:/Windows/Fonts/NotoSerifSC-VF.ttf"); font-weight: 200 900; }
+  @font-face { font-family: "LSans"; src: local("Noto Sans SC"), url("file:///C:/Windows/Fonts/NotoSansSC-VF.ttf"); font-weight: 100 900; }
+
+  html, body { margin: 0; background: #1b1b1a; }
+  body.play { display: flex; justify-content: center; align-items: flex-start; height: 100vh; overflow: hidden; }
+  #stage {
+    position: relative; width: 1080px; height: 2400px; overflow: hidden;
+    font-family: LSans, "Microsoft YaHei", sans-serif; color: #141413;
+    transform-origin: 0 0;
+  }
+  .abs { position: absolute; left: 0; top: 0; }
+  svg { display: block; overflow: visible; }
+  img.px { image-rendering: pixelated; }
+
+  .brand { position: absolute; left: 0; top: 2050px; width: 1080px; text-align: center; }
+  .brand-row { display: flex; align-items: center; justify-content: center; gap: 28px; }
+  .brand-name { font-family: LSerif; font-weight: 700; font-size: 104px; letter-spacing: .14em; margin-right: -.14em; line-height: 1.1; }
+  .brand-tag { margin-top: 22px; font-size: 38px; letter-spacing: .32em; margin-right: -.32em; }
+
+  .card {
+    position: absolute; background: #FFFFFF; border-radius: 40px;
+    border: 2px solid rgba(20,20,19,.10);
+    box-shadow: 0 18px 50px rgba(20,20,19,.07), 0 2px 6px rgba(20,20,19,.04);
+  }
+  .pill {
+    position: absolute; height: 96px; border-radius: 48px; display: flex; align-items: center;
+    justify-content: center; gap: 18px; font-size: 40px; font-weight: 600; white-space: nowrap;
+  }
+  .cn-serif { font-family: LSerif; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<script>
+'use strict';
+
+// ---------------------------------------------------------------- 基础
+const params = new URLSearchParams(location.search);
+const SCENE = Number(params.get('s') || 1);
+const DURATION = 3.0;
+const W = 1080, H = 2400;
+const stage = document.getElementById('stage');
+const ASSET = '../../app/src/main/res/drawable-nodpi/';
+
+const C = {
+  canvas: '#FAF9F5', panel: '#FFFFFF', sidebar: '#F5F4ED', subtle: '#F0EEE6', pressed: '#E8E6DC',
+  text: '#141413', text2: '#3D3D3A', muted: '#73726C',
+  accent: '#C6613F', accentStrong: '#A94E33', accentSoft: '#F8ECE8', mark: '#F4DDB5',
+  danger: '#B6483D', dangerSoft: '#F5E5E4', green: '#4F725E', greenSoft: '#E6EBE8',
+  amber: '#7D591D', amberSoft: '#EDE8DF',
+  dCanvas: '#30302E', dPanel: '#3D3D3A', dSidebar: '#262624', dSubtle: '#363634',
+  dText: '#FAF9F5', dText2: '#C2C0B6', dMuted: '#9C9A92', dAccent: '#D97757', dAmber: '#DFBB72',
+  clawd: '#D67857', eye: '#000000',
+};
+
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const lerp = (a, b, p) => a + (b - a) * p;
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const arc = (p, h) => 4 * h * p * (1 - p);
+const E = {
+  outCubic: p => 1 - Math.pow(1 - p, 3),
+  inCubic: p => p * p * p,
+  inQuad: p => p * p,
+  outQuad: p => 1 - (1 - p) * (1 - p),
+  inOutCubic: p => p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2,
+  inOutSine: p => -(Math.cos(Math.PI * p) - 1) / 2,
+  outBack: p => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2); },
+  outBackSoft: p => { const c1 = 1.1, c3 = c1 + 1; return 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2); },
+};
+
+function rng(seed) {
+  return () => {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function hex(c) { const n = parseInt(c.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+function mix(a, b, p) {
+  const x = hex(a), y = hex(b);
+  return `rgb(${Math.round(lerp(x[0], y[0], p))},${Math.round(lerp(x[1], y[1], p))},${Math.round(lerp(x[2], y[2], p))})`;
+}
+
+function el(tag, cls, parent, html) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html !== undefined) e.innerHTML = html;
+  (parent || stage).appendChild(e);
+  return e;
+}
+function place(e, x, y, { s = 1, sx = s, sy = s, r = 0, o = 1 } = {}) {
+  e.style.transform = `translate(${x}px,${y}px) rotate(${r}deg) scale(${sx},${sy})`;
+  e.style.opacity = o;
+}
+function svgLayer(parent) {
+  const holder = el('div', 'abs', parent);
+  return html => { holder.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${html}</svg>`; };
+}
+
+// ---------------------------------------------------------------- 像素工具
+function rect(x, y, w, h, fill, extra = '') {
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill}" ${extra}/>`;
+}
+// rows：'#' 为实心像素，横向连续的合并成一个矩形
+function bitmap(rows, u, fill, ox = 0, oy = 0) {
+  let s = '';
+  rows.forEach((row, j) => {
+    let i = 0;
+    while (i < row.length) {
+      if (row[i] === '#') {
+        let k = i; while (k < row.length && row[k] === '#') k++;
+        s += rect(ox + i * u, oy + j * u, (k - i) * u, u, fill);
+        i = k;
+      } else i++;
+    }
+  });
+  return s;
+}
+function bitmapSVG(rows, u, fill) {
+  const w = rows[0].length * u, h = rows.length * u;
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" shape-rendering="crispEdges">${bitmap(rows, u, fill)}</svg>`;
+}
+function circleRows(r, cut) {
+  const rows = [], n = r * 2;
+  for (let j = 0; j < n; j++) {
+    let row = '';
+    for (let i = 0; i < n; i++) {
+      const dx = i + .5 - r, dy = j + .5 - r;
+      let on = dx * dx + dy * dy <= r * r;
+      if (on && cut) { const ex = dx - cut.dx, ey = dy - cut.dy; if (ex * ex + ey * ey <= cut.r * cut.r) on = false; }
+      row += on ? '#' : '.';
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
+const BM = {
+  qmark: ['.###.', '#...#', '....#', '..##.', '..#..', '.....', '..#..'],
+  check: ['.......#', '......##', '#....##.', '##..##..', '.####...', '..##....'],
+  z: ['#####', '...#.', '..#..', '.#...', '#####'],
+  plus: ['..#..', '..#..', '#####', '..#..', '..#..'],
+  spark: ['...#...', '...#...', '..###..', '#######', '..###..', '...#...', '...#...'],
+  cloud: ['....####....', '..########..', '.##########.', '############'],
+  cloud2: ['...###.....', '..#####.##.', '.#########.', '###########'],
+};
+const DIGITS = {
+  '0': ['###', '#.#', '#.#', '#.#', '###'], '1': ['.#.', '##.', '.#.', '.#.', '###'],
+  '2': ['###', '..#', '###', '#..', '###'], '3': ['###', '..#', '###', '..#', '###'],
+  '4': ['#.#', '#.#', '###', '..#', '..#'], '5': ['###', '#..', '###', '..#', '###'],
+  '6': ['###', '#..', '###', '#.#', '###'], '7': ['###', '..#', '..#', '..#', '..#'],
+  '8': ['###', '#.#', '###', '#.#', '###'], '9': ['###', '#.#', '###', '..#', '###'],
+  ':': ['.', '#', '.', '#', '.'],
+};
+function pixelDigits(str, u, fill, { hideColon = false } = {}) {
+  let x = 0, s = '';
+  for (const ch of str) {
+    const g = DIGITS[ch];
+    if (!(ch === ':' && hideColon)) s += bitmap(g, u, fill, x, 0);
+    x += (g[0].length + 1) * u;
+  }
+  const w = x - u, h = 5 * u;
+  return { svg: `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" shape-rendering="crispEdges">${s}</svg>`, w, h };
+}
+
+// ---------------------------------------------------------------- 主角：Claude 像素小卵包
+// 网格单位 u：身体 8×6，两侧手臂各 2 格，四条腿 1×2。锚点在脚底中线（单位坐标 4, 8）。
+function clawdInner(o = {}) {
+  const eyes = o.eyes || 'open', arms = o.arms || 'out', legs = o.legs || 'stand';
+  const lx = o.look || 0, ly = o.lookY || 0;
+  const body = o.color || C.clawd, eye = C.eye;
+  let s = o.back || '';
+  s += rect(0, 0, 8, 6, body);
+  if (arms === 'out') s += rect(-2, 2, 2, 2, body) + rect(8, 2, 2, 2, body);
+  else if (arms === 'up') s += rect(-2, 0, 2, 2, body) + rect(-3, -2, 2, 2, body) + rect(8, 0, 2, 2, body) + rect(9, -2, 2, 2, body);
+  else if (arms === 'high') s += rect(-1.5, -2, 1.5, 4, body) + rect(8, -2, 1.5, 4, body);
+  else if (arms === 'down') s += rect(-1.5, 3, 1.5, 2, body) + rect(8, 3, 1.5, 2, body);
+  const legX = [0, 2, 5, 7];
+  legX.forEach((x, i) => {
+    let h = 2;
+    if (legs === 'a' && (i === 0 || i === 2)) h = 1.1;
+    if (legs === 'b' && (i === 1 || i === 3)) h = 1.1;
+    if (legs === 'tuck') h = 1.2;
+    s += rect(x, 6, 1, h, body);
+  });
+  const ex = [1 + lx, 6 + lx], ey = 1 + ly;
+  ex.forEach((x, i) => {
+    if (eyes === 'open') s += rect(x, ey, 1, 1, eye);
+    else if (eyes === 'wide') s += rect(x, ey - .2, 1, 1.35, eye);
+    else if (eyes === 'blink' || eyes === 'closed') s += rect(x - .1, ey + .55, 1.2, .3, eye);
+    else if (eyes === 'happy') s += rect(x - .25, ey + .5, .5, .5, eye) + rect(x + .25, ey, .5, .5, eye) + rect(x + .75, ey + .5, .5, .5, eye);
+    else if (eyes === 'squint') {
+      if (i === 0) s += rect(x, ey - .2, .5, .5, eye) + rect(x + .5, ey + .3, .5, .5, eye) + rect(x, ey + .8, .5, .5, eye);
+      else s += rect(x + .5, ey - .2, .5, .5, eye) + rect(x, ey + .3, .5, .5, eye) + rect(x + .5, ey + .8, .5, .5, eye);
+    }
+  });
+  if (o.blush) s += rect(.2, 2.5, 1.2, .5, '#E89B7F') + rect(6.6, 2.5, 1.2, .5, '#E89B7F');
+  s += o.front || '';
+  return s;
+}
+function clawdSVG(o = {}) {
+  const u = o.u || 20;
+  const vb = o.vb || [-4, -4, 16, 12];
+  return `<svg width="${vb[2] * u}" height="${vb[3] * u}" viewBox="${vb.join(' ')}" shape-rendering="crispEdges">${clawdInner(o)}</svg>`;
+}
+
+class Clawd {
+  constructor(parent, u) {
+    this.u = u;
+    this.shadow = el('div', 'abs', parent);
+    Object.assign(this.shadow.style, { width: `${9 * u}px`, height: `${1.6 * u}px`, borderRadius: '50%', background: 'rgba(20,20,19,.13)' });
+    this.box = el('div', 'abs', parent);
+    this.box.style.transformOrigin = `${8 * u}px ${12 * u}px`;
+    this.key = '';
+  }
+  draw(o) {
+    const key = JSON.stringify(o);
+    if (key !== this.key) { this.box.innerHTML = clawdSVG({ ...o, u: this.u }); this.key = key; }
+  }
+  // (x, y) 为脚底中线位置
+  at(x, y, { sx = 1, sy = 1, r = 0, o = 1 } = {}) {
+    const u = this.u;
+    this.box.style.transform = `translate(${x - 8 * u}px,${y - 12 * u}px) rotate(${r}deg) scale(${sx},${sy})`;
+    this.box.style.opacity = o;
+  }
+  shadowAt(x, groundY, lift = 0, o = 1, color) {
+    const u = this.u, k = clamp(1 - lift / (12 * u), .35, 1);
+    place(this.shadow, x - 4.5 * u, groundY - .8 * u, { sx: k, sy: k, o: o * (.35 + .65 * k) });
+    if (color) this.shadow.style.background = color;
+  }
+}
+
+// 铅笔：竖着握在左手，笔尖落在脚底那条线上
+function pencil() {
+  const x = -3.1;
+  return rect(x, -1.2, 1, .9, '#E39A86') + rect(x, -.3, 1, .6, '#B9B6AA') +
+    rect(x, .3, 1, 5.4, '#F2C46B') + rect(x + .62, .3, .38, 5.4, '#D9A441') +
+    `<polygon points="${x},5.7 ${x + 1},5.7 ${x + .5},8" fill="#EBCB9F"/>` +
+    `<polygon points="${x + .33},7.05 ${x + .67},7.05 ${x + .5},8" fill="#3D3D3A"/>`;
+}
+
+// ---------------------------------------------------------------- 粒子
+function makeBurst(seed, n, opt) {
+  const R = rng(seed), list = [];
+  for (let i = 0; i < n; i++) {
+    const a = lerp(opt.a0, opt.a1, R()), sp = lerp(opt.v0, opt.v1, R());
+    list.push({
+      vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, size: lerp(opt.s0, opt.s1, R()),
+      color: opt.colors[Math.floor(R() * opt.colors.length)], spin: lerp(-720, 720, R()), life: lerp(opt.l0, opt.l1, R()),
+    });
+  }
+  return list;
+}
+function burstSVG(list, x0, y0, dt, g = 2600) {
+  if (dt < 0) return '';
+  let s = '';
+  for (const p of list) {
+    if (dt > p.life) continue;
+    const x = x0 + p.vx * dt, y = y0 + p.vy * dt + .5 * g * dt * dt;
+    const o = 1 - Math.pow(dt / p.life, 3);
+    s += `<rect x="${-p.size / 2}" y="${-p.size / 2}" width="${p.size}" height="${p.size}" fill="${p.color}" opacity="${o.toFixed(3)}" transform="translate(${x.toFixed(1)},${y.toFixed(1)}) rotate(${(p.spin * dt).toFixed(1)})"/>`;
+  }
+  return s;
+}
+
+// 背景里闪烁的十字星
+function makeSparkles(seed, n, area, avoid = []) {
+  const R = rng(seed), list = [];
+  let guard = 0;
+  while (list.length < n && guard++ < 2000) {
+    const x = lerp(area[0], area[2], R()), y = lerp(area[1], area[3], R());
+    if (avoid.some(a => x > a[0] && x < a[2] && y > a[1] && y < a[3])) continue;
+    list.push({ x, y, u: R() < .3 ? 6 : 4, ph: R(), sp: lerp(.8, 1.6, R()), big: R() < .25 });
+  }
+  return list;
+}
+function sparklesSVG(list, t, fill, base = 1) {
+  let s = '';
+  for (const p of list) {
+    const tw = .25 + .75 * Math.pow(.5 + .5 * Math.sin((t * p.sp + p.ph) * Math.PI * 2), 2);
+    const rows = p.big ? BM.spark : BM.plus, w = rows[0].length * p.u;
+    s += `<g opacity="${(tw * base).toFixed(3)}" transform="translate(${(p.x - w / 2).toFixed(1)},${(p.y - w / 2).toFixed(1)})">${bitmap(rows, p.u, fill)}</g>`;
+  }
+  return s;
+}
+
+// ---------------------------------------------------------------- 品牌落款（四段共用）
+function makeBrand(tagline, parent) {
+  const b = el('div', 'brand', parent);
+  b.innerHTML = `<div class="brand-row"><span class="brand-mark">${clawdSVG({ u: 9, vb: [-2, 0, 12, 8] })}</span>` +
+    `<span class="brand-name">小卵包</span></div><div class="brand-tag">${tagline}</div>`;
+  const name = b.querySelector('.brand-name'), tag = b.querySelector('.brand-tag');
+  return (t, dark = 0) => {
+    const p = E.outCubic(seg(t, .25, .8));
+    b.style.opacity = p;
+    b.style.transform = `translateY(${(1 - p) * 36}px)`;
+    name.style.color = mix(C.text, C.dText, dark);
+    tag.style.color = mix(C.muted, C.dMuted, dark);
+  };
+}
+
+// ================================================================ 1 · 本日计划
+function scene1() {
+  stage.style.background = C.canvas;
+  const bg = svgLayer(stage);
+  const sparkles = makeSparkles(11, 12, [60, 640, 1020, 1000], [[200, 600, 880, 1000]]);
+
+  const sun = el('div', 'abs', stage, bitmapSVG(circleRows(13), 12, C.mark));
+  const clouds = [
+    { e: el('div', 'abs', stage, bitmapSVG(BM.cloud, 18, C.subtle)), x: 90, y: 760, v: 26 },
+    { e: el('div', 'abs', stage, bitmapSVG(BM.cloud2, 14, C.subtle)), x: 720, y: 880, v: -18 },
+  ];
+
+  const clock = el('div', 'abs', stage);
+  const date = el('div', 'abs', stage, '10月12日 · 星期一');
+  Object.assign(date.style, { width: W + 'px', textAlign: 'center', fontSize: '42px', color: C.muted, letterSpacing: '.08em' });
+
+  const pill = el('div', 'pill', stage);
+  const calIcon = color => `<svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>`;
+
+  const hero = svgLayer(stage);
+  const clawd = new Clawd(stage, 28);
+  const fx = svgLayer(stage);
+  const count = el('div', 'abs', stage);
+  const badge = el('div', 'abs', stage);
+  badge.innerHTML = `<svg width="190" height="190" viewBox="0 0 190 190"><circle cx="95" cy="95" r="88" fill="${C.green}"/><circle cx="95" cy="95" r="88" fill="none" stroke="#FFFFFF" stroke-opacity=".35" stroke-width="6"/>` +
+    `<g transform="translate(47,59)" shape-rendering="crispEdges">${bitmap(BM.check, 12, '#FFFFFF')}</g></svg>`;
+
+  const card = el('div', 'card', stage);
+  Object.assign(card.style, { left: '90px', top: '1660px', width: '900px', height: '230px', boxSizing: 'border-box' });
+  card.innerHTML = `
+    <div style="position:absolute;left:46px;top:50px;width:130px;height:130px"><svg width="130" height="130" viewBox="0 0 130 130" id="miniRing"></svg></div>
+    <div style="position:absolute;left:214px;top:44px;right:40px">
+      <div style="position:relative;display:inline-block;font-size:58px;font-weight:600;line-height:1.25" id="tTitle">背 30 个单词
+        <span id="tStrike" style="position:absolute;left:-6px;right:-6px;top:54%;height:6px;border-radius:3px;background:${C.text2};transform-origin:0 50%"></span></div>
+      <div style="margin-top:14px;font-size:38px;font-weight:500;letter-spacing:.04em" id="tSub"></div>
+    </div>`;
+  const miniRing = card.querySelector('#miniRing'), tTitle = card.querySelector('#tTitle'),
+    tStrike = card.querySelector('#tStrike'), tSub = card.querySelector('#tSub');
+
+  const brand = makeBrand('今天的事，一件一件做完');
+
+  const floorY = 1400, CX = 540;
+  const T = { land: .78, holdStart: .95, done: 2.15, jumpEnd: 2.7 };
+  const dust = makeBurst(3, 12, { a0: Math.PI * .95, a1: Math.PI * 1.05, v0: 260, v1: 520, s0: 10, s1: 18, l0: .28, l1: .4, colors: [C.pressed, '#D5D2C6'] })
+    .concat(makeBurst(4, 12, { a0: -Math.PI * .05, a1: Math.PI * .05, v0: 260, v1: 520, s0: 10, s1: 18, l0: .28, l1: .4, colors: [C.pressed, '#D5D2C6'] }));
+  const confetti = makeBurst(7, 46, { a0: -Math.PI * .92, a1: -Math.PI * .08, v0: 700, v1: 1500, s0: 12, s1: 24, l0: .7, l1 : 1.0, colors: [C.accent, C.green, C.mark, C.dAmber, C.clawd, '#8FB69D'] });
+
+  function ringPath(cx, cy, rx, ry) {
+    return `M ${cx} ${cy + ry} A ${rx} ${ry} 0 0 1 ${cx - rx} ${cy} A ${rx} ${ry} 0 0 1 ${cx} ${cy - ry} A ${rx} ${ry} 0 0 1 ${cx + rx} ${cy} A ${rx} ${ry} 0 0 1 ${cx} ${cy + ry}`;
+  }
+
+  return t => {
+    // 背景
+    bg(sparklesSVG(sparkles, t, C.mark, E.outCubic(seg(t, .1, .6))));
+    const sp = E.outCubic(seg(t, 0, .7));
+    place(sun, 770, lerp(700, 610, sp), { o: sp });
+    clouds.forEach(c => place(c.e, c.x + c.v * t, c.y, { o: E.outCubic(seg(t, .05, .5)) }));
+
+    // 时钟与日期
+    const hp = E.outCubic(seg(t, 0, .45));
+    const d = pixelDigits('07:30', 22, C.text, { hideColon: (t % 1) > .5 });
+    clock.innerHTML = d.svg;
+    place(clock, (W - d.w) / 2, 230 + (1 - hp) * 30, { o: hp });
+    const dp = E.outCubic(seg(t, .08, .5));
+    place(date, 0, 375 + (1 - dp) * 26, { o: dp });
+
+    // 打卡气泡：打卡中 → 已完成
+    const pp = E.outCubic(seg(t, .14, .56));
+    const doneP = seg(t, 2.38, 2.5);
+    const isDone = t >= 2.44;
+    const fg = mix(C.danger, C.green, doneP), bgc = mix(C.dangerSoft, C.greenSoft, doneP);
+    pill.innerHTML = `${calIcon(fg)}<span>${isDone ? '已完成' : '打卡中'}</span><span style="font-weight:500;opacity:.8">· 累计 ${isDone ? 42 : 41} 天</span>`;
+    Object.assign(pill.style, { color: fg, background: bgc, width: '470px', left: '305px', top: '465px' });
+    const pop = isDone ? 1 + .1 * Math.sin(Math.PI * seg(t, 2.44, 2.62)) : 1;
+    place(pill, 0, (1 - pp) * 26, { s: pop, o: pp });
+
+    // 按键：底座 + 圆柱 + 进度环
+    const rise = E.outBack(seg(t, .04, .5));
+    const by = floorY + (1 - rise) * 260, bo = clamp(seg(t, .04, .25));
+    let Hb = 120;
+    if (t >= T.land && t < T.done) Hb = lerp(120, 80, E.outCubic(seg(t, T.land, T.land + .1)));
+    if (t >= T.done) Hb = lerp(80, 120, E.outBack(seg(t, T.done, T.done + .22)));
+    if (t >= T.jumpEnd) Hb = lerp(120, 104, Math.sin(Math.PI * seg(t, T.jumpEnd, T.jumpEnd + .2)));
+    const capY = by - Hb;
+
+    const ringP = E.inOutSine(seg(t, T.holdStart, T.done));
+    const ringY = by + 26;
+    const flash = seg(t, T.done, T.done + .45);
+    const capColor = mix(C.green, '#6E9580', Math.sin(Math.PI * clamp(seg(t, T.done, T.done + .3))));
+    let h = `<g opacity="${bo}">`;
+    h += `<path d="${ringPath(CX, ringY, 390, 110)}" fill="none" stroke="${C.pressed}" stroke-width="26"/>`;
+    if (ringP > .004) h += `<path d="${ringPath(CX, ringY, 390, 110)}" pathLength="100" stroke-dasharray="${(ringP * 100).toFixed(2)} 200" fill="none" stroke="${C.accent}" stroke-width="26" stroke-linecap="round"/>`;
+    if (flash > 0 && flash < 1) h += `<ellipse cx="${CX}" cy="${ringY}" rx="${390 + 150 * E.outCubic(flash)}" ry="${110 + 45 * E.outCubic(flash)}" fill="none" stroke="${C.accent}" stroke-width="${16 * (1 - flash)}" opacity="${1 - flash}"/>`;
+    h += `<ellipse cx="${CX}" cy="${by + 26}" rx="315" ry="86" fill="#D5D2C6"/><rect x="${CX - 315}" y="${by}" width="630" height="26" fill="#D5D2C6"/>`;
+    h += `<ellipse cx="${CX}" cy="${by}" rx="315" ry="86" fill="${C.pressed}"/>`;
+    h += `<ellipse cx="${CX}" cy="${by}" rx="240" ry="64" fill="#3C5A49"/><rect x="${CX - 240}" y="${capY}" width="480" height="${Hb}" fill="#3C5A49"/>`;
+    h += `<rect x="${CX - 240}" y="${capY}" width="480" height="${Hb}" fill="url(#cyl)"/>`;
+    h += `<ellipse cx="${CX}" cy="${capY}" rx="240" ry="64" fill="${capColor}"/>`;
+    h += `<ellipse cx="${CX - 48}" cy="${capY - 12}" rx="155" ry="32" fill="#FFFFFF" opacity=".12"/>`;
+    h += `<defs><linearGradient id="cyl" x1="0" x2="1"><stop offset="0" stop-color="#000" stop-opacity=".18"/><stop offset=".35" stop-color="#fff" stop-opacity=".08"/><stop offset="1" stop-color="#000" stop-opacity=".25"/></linearGradient></defs>`;
+    h += `</g>`;
+    hero(h);
+
+    // 小卵包：从天而降 → 按住 → 完成跳起
+    let x = CX, y = capY, sx = 1, sy = 1, pose = { eyes: 'open', arms: 'out', legs: 'stand' }, co = 1;
+    if (t < T.land) {
+      const p = seg(t, .3, T.land);
+      y = lerp(-120, capY, E.inQuad(p));
+      sx = .9; sy = 1.12; pose = { eyes: 'wide', arms: 'high', legs: 'tuck', lookY: .25 };
+      co = t < .3 ? 0 : 1;
+    } else if (t < T.holdStart) {
+      const p = seg(t, T.land, T.holdStart);
+      sx = lerp(1.26, 1.08, E.outCubic(p)); sy = lerp(.76, .93, E.outCubic(p));
+      pose = { eyes: 'squint', arms: 'down', legs: 'stand' };
+    } else if (t < T.done) {
+      const shake = Math.sin(t * 70) * 2.5 * seg(t, T.holdStart, T.holdStart + .3);
+      x += shake; sx = 1.08 + .02 * Math.sin(t * 22); sy = .93 - .02 * Math.sin(t * 22);
+      pose = { eyes: 'squint', arms: 'down', legs: 'stand' };
+    } else if (t < T.jumpEnd) {
+      const p = seg(t, T.done, T.jumpEnd);
+      y = capY - arc(p, 200);
+      const up = p < .5;
+      sx = up ? .92 : 1; sy = up ? 1.1 : 1;
+      pose = { eyes: 'happy', arms: 'up', legs: 'tuck', blush: true };
+    } else {
+      const p = seg(t, T.jumpEnd, T.jumpEnd + .2);
+      const sq = Math.sin(Math.PI * p);
+      sx = 1 + .14 * sq; sy = 1 - .14 * sq;
+      pose = { eyes: 'happy', arms: 'up', legs: 'stand', blush: true };
+    }
+    clawd.draw(pose);
+    clawd.at(x, y, { sx, sy, o: co });
+    clawd.shadowAt(x, capY, capY - y, co * bo, 'rgba(20,20,19,.16)');
+
+    // 倒数 3·2·1
+    count.innerHTML = '';
+    if (t >= T.holdStart && t < T.done) {
+      const k = Math.min(2, Math.floor((t - T.holdStart) / ((T.done - T.holdStart) / 3)));
+      const k0 = T.holdStart + k * (T.done - T.holdStart) / 3;
+      const dd = pixelDigits(String(3 - k), 20, C.accent);
+      count.innerHTML = dd.svg;
+      const pp2 = E.outBack(seg(t, k0, k0 + .16));
+      place(count, CX - dd.w / 2, capY - 8 * 28 - 150, { s: .4 + .6 * pp2, o: clamp(pp2 * 1.5) });
+      count.style.transformOrigin = `${dd.w / 2}px ${dd.h}px`;
+    }
+
+    // 完成：对勾徽章 + 彩纸
+    const bp = seg(t, T.done + .05, T.done + .35);
+    badge.style.transformOrigin = '95px 95px';
+    place(badge, CX - 95, 600 + Math.sin(Math.max(0, t - T.done) * 6) * 6, { s: E.outBack(bp) * (t >= T.done ? 1 : 0), o: clamp(bp * 3) });
+    let f = burstSVG(dust.slice(0, 12), CX - 120, capY - 6, t - T.land, 0) + burstSVG(dust.slice(12), CX + 120, capY - 6, t - T.land, 0);
+    f += burstSVG(confetti, CX, capY - 40, t - T.done);
+    fx(f);
+
+    // 任务卡片
+    const cp = E.outCubic(seg(t, .16, .6));
+    place(card, 0, (1 - cp) * 60, { o: cp });
+    const running = t < T.done;
+    card.style.background = mix('#F1F4F2', C.panel, running ? 0 : seg(t, T.done, T.done + .3));
+    card.style.borderColor = running ? 'rgba(79,114,94,.35)' : 'rgba(20,20,19,.10)';
+    const mp = ringP, mc = 2 * Math.PI * 52;
+    let mr = `<circle cx="65" cy="65" r="52" fill="none" stroke="${running ? C.greenSoft : C.subtle}" stroke-width="10"/>`;
+    if (running) {
+      mr += `<circle cx="65" cy="65" r="52" fill="none" stroke="${C.green}" stroke-width="10" opacity=".35"/>`;
+      if (mp > .004) mr += `<circle cx="65" cy="65" r="52" fill="none" stroke="${C.accent}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${mp * mc} ${mc}" transform="rotate(-90 65 65)"/>`;
+      mr += `<rect x="50" y="45" width="10" height="40" rx="3" fill="${C.green}"/><rect x="70" y="45" width="10" height="40" rx="3" fill="${C.green}"/>`;
+    } else {
+      const k = E.outBack(seg(t, T.done, T.done + .25));
+      mr += `<g transform="translate(65 65) scale(${k}) translate(-65 -65)"><circle cx="65" cy="65" r="57" fill="${C.green}"/><path d="M42 66 L58 82 L90 49" fill="none" stroke="#fff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/></g>`;
+    }
+    miniRing.innerHTML = mr;
+    const strikeP = E.inOutCubic(seg(t, T.done + .05, T.done + .32));
+    tStrike.style.transform = `scaleX(${strikeP})`;
+    tTitle.style.color = mix(C.text, C.muted, strikeP);
+    const secs = 12 + Math.floor(Math.min(t, T.done));
+    tSub.innerHTML = running ? `计时中 · 25:${String(secs).padStart(2, '0')}` : `已完成 · 学习 25 分钟`;
+    tSub.style.color = running ? C.green : C.muted;
+
+    brand(t);
+  };
+}
+
+// ================================================================ 2 · 日记随想
+// 整幅画面按明暗各搭一份，暗色那份用从主题气泡扩散出去的圆形裁切露出来，
+// 和 App 里点天使 / 恶魔气泡切主题是同一个动作。
+const S2 = { BX: 540, BY: 320, cell: 124, gap: 40, cols: 7, rows: 4, pad: 18, paperY: 1070, u: 21 };
+S2.paperW = S2.cols * S2.cell + S2.pad * 2;
+S2.paperX = (W - S2.paperW) / 2;
+S2.gx = S2.paperX + S2.pad;
+S2.gy = S2.paperY + 40;
+S2.paperH = S2.rows * S2.cell + (S2.rows - 1) * S2.gap + 80;
+S2.rowTop = i => S2.gy + i * (S2.cell + S2.gap);
+S2.walk0 = .75; S2.walk1 = 2.25;
+S2.tipOffset = -6.6 * S2.u; // 笔尖相对锚点的横向偏移
+S2.xStart = S2.gx + 6.6 * S2.u + 10;
+S2.xEnd = S2.gx + 5 * S2.cell + 6.6 * S2.u + 10;
+S2.walkX = t => lerp(S2.xStart, S2.xEnd, E.inOutSine(seg(t, S2.walk0, S2.walk1)));
+
+function diaryLayer(root, th) {
+  const T = th
+    ? { bg0: C.dSidebar, bg1: C.dCanvas, paper: C.dPanel, text: C.dText, muted: C.dMuted, line: C.dAccent, lineOp: .55, bubble: C.dPanel, drop: .32, shadow: 'rgba(0,0,0,.32)' }
+    : { bg0: C.canvas, bg1: C.canvas, paper: C.panel, text: C.text, muted: C.muted, line: C.accent, lineOp: .45, bubble: C.subtle, drop: .06, shadow: 'rgba(20,20,19,.12)' };
+  Object.assign(root.style, { width: W + 'px', height: H + 'px', background: `linear-gradient(${T.bg0}, ${T.bg1})` });
+
+  const bg = svgLayer(root);
+  const stars = makeSparkles(23, 30, [40, 120, 1040, 940], [[300, 170, 780, 640], [70, 1030, 1010, 1790]]);
+  const sky = el('div', 'abs', root, bitmapSVG(th ? circleRows(8, { dx: 3.4, dy: -2.6, r: 7 }) : circleRows(8), 13, th ? C.dAmber : C.mark));
+  const clouds = th ? [] : [
+    { e: el('div', 'abs', root, bitmapSVG(BM.cloud, 16, C.subtle)), x: 70, y: 700, v: 20 },
+    { e: el('div', 'abs', root, bitmapSVG(BM.cloud2, 12, C.subtle)), x: 760, y: 820, v: -14 },
+  ];
+  let glow = null;
+  if (th) {
+    glow = el('div', 'abs', root);
+    Object.assign(glow.style, { width: '1400px', height: '1400px', borderRadius: '50%', background: 'radial-gradient(closest-side, rgba(217,119,87,.22), rgba(217,119,87,0))' });
+  }
+
+  const bubble = el('div', 'abs', root);
+  Object.assign(bubble.style, { width: '200px', height: '200px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', transformOrigin: '100px 100px', background: T.bubble, boxShadow: `0 12px 34px rgba(20,20,19,${th ? .35 : .08})` });
+  const iconLight = `<img class="px" src="${ASSET}ic_theme_light.png" width="150" height="150">`;
+  const iconDark = `<img class="px" src="${ASSET}ic_theme_dark.png" width="150" height="150">`;
+  const head = el('div', 'abs', root);
+  Object.assign(head.style, { width: W + 'px', textAlign: 'center', color: T.text });
+  head.innerHTML = `<div class="cn-serif" style="font-size:66px;font-weight:700;letter-spacing:.12em">日记随想</div><div style="margin-top:12px;font-size:38px;letter-spacing:.08em;color:${T.muted}">10月12日 · 星期一</div>`;
+
+  const paper = svgLayer(root);
+  const { cell, gx } = S2;
+  const chars = [];
+  const mkChar = (ch, r, c, bold) => {
+    const e = el('div', 'abs cn-serif', root, ch);
+    Object.assign(e.style, { width: cell + 'px', height: cell + 'px', lineHeight: cell + 'px', textAlign: 'center', fontSize: bold ? '78px' : '76px', fontWeight: bold ? 700 : 500, color: T.text, transformOrigin: '50% 60%' });
+    const item = { e, x: gx + c * cell, y: S2.rowTop(r), r, c };
+    chars.push(item);
+    return item;
+  };
+  ['十', '月', '十', '二', '日', '', '晴'].forEach((ch, c) => ch && mkChar(ch, 0, c, true));
+  const lineChars = ['今', '天', '辛', '苦', '啦'].map((ch, c) => mkChar(ch, 1, c, false));
+  const writeAt = lineChars.map(ch => {
+    for (let k = 0; k <= 600; k++) {
+      const tt = lerp(S2.walk0, S2.walk1, k / 600);
+      if (S2.walkX(tt) + S2.tipOffset >= ch.x + cell * .7) return tt;
+    }
+    return S2.walk1;
+  });
+
+  const clawd = new Clawd(root, S2.u);
+  const zz = el('div', 'abs', root);
+  const brand = makeBrand('把今天，写进稿纸里', root);
+
+  return t => {
+    bg(th ? sparklesSVG(stars, t, C.dAmber, E.outCubic(seg(t, .3, .8))) : '');
+    const mp = E.outCubic(seg(t, .3, 1.1));
+    place(sky, 800, th ? lerp(720, 560, mp) : lerp(560, 640, mp));
+    clouds.forEach(c => place(c.e, c.x + c.v * t, c.y));
+    if (glow) place(glow, 540 - 700, 1420 - 700);
+
+    // 主题气泡：先被按下翻面（天使 → 恶魔），翻到一半时圆形扩散开始
+    const fp = seg(t, .1, .36);
+    bubble.innerHTML = fp < .5 ? iconLight : iconDark;
+    const press = 1 - .1 * Math.sin(Math.PI * seg(t, .06, .2));
+    const hp = E.outCubic(seg(t, 0, .3));
+    place(bubble, S2.BX - 100, S2.BY - 100 + (1 - hp) * 30, { sx: Math.max(.02, Math.abs(Math.cos(Math.PI * fp))) * press, sy: press, o: hp });
+    place(head, 0, 470 + (1 - hp) * 24, { o: hp });
+
+    // 稿纸
+    const pp = E.outCubic(seg(t, .04, .42));
+    const py = (1 - pp) * 60;
+    const { paperX, paperY, paperW, paperH, cols, rows } = S2;
+    let s = `<g transform="translate(0 ${py})" opacity="${pp}">`;
+    s += `<rect x="${paperX}" y="${paperY + 16}" width="${paperW}" height="${paperH}" rx="30" fill="#000" opacity="${T.drop}"/>`;
+    s += `<rect x="${paperX}" y="${paperY}" width="${paperW}" height="${paperH}" rx="30" fill="${T.paper}"/>`;
+    for (let r = 0; r < rows; r++) {
+      const y0 = S2.rowTop(r);
+      s += `<rect x="${gx}" y="${y0}" width="${cols * cell}" height="${cell}" fill="none" stroke="${T.line}" stroke-opacity="${T.lineOp}" stroke-width="3"/>`;
+      for (let c = 1; c < cols; c++) s += `<line x1="${gx + c * cell}" y1="${y0}" x2="${gx + c * cell}" y2="${y0 + cell}" stroke="${T.line}" stroke-opacity="${T.lineOp * .7}" stroke-width="2"/>`;
+    }
+    s += `</g>`;
+    paper(s);
+
+    chars.forEach(ch => {
+      if (ch.r !== 0) return;
+      const q = E.outCubic(seg(t, .08 + ch.c * .05, .32 + ch.c * .05));
+      place(ch.e, ch.x, ch.y + py, { s: .8 + .2 * q, o: q * pp });
+    });
+    lineChars.forEach((ch, i) => {
+      const q = seg(t, writeAt[i], writeAt[i] + .14);
+      place(ch.e, ch.x, ch.y + py, { s: .55 + .45 * E.outBack(q), o: clamp(q * 2.5) });
+    });
+
+    // 小卵包：抬头看主题切换 → 握着铅笔一边走一边写 → 停下打盹
+    const feet = S2.rowTop(1) + cell + py;
+    let x = S2.xStart, sx = 1, sy = 1, pose;
+    if (t < S2.walk0) {
+      const blink = t > .58 && t < .65;
+      pose = { eyes: blink ? 'blink' : 'open', lookY: -.3, look: .1, arms: 'out', front: pencil() };
+    } else if (t < S2.walk1) {
+      x = S2.walkX(t);
+      const step = Math.floor((t - S2.walk0) / .085) % 2;
+      pose = { eyes: 'open', look: .3, lookY: .2, arms: 'out', legs: step ? 'a' : 'b', front: pencil() };
+      sy = 1 + (step ? .025 : 0);
+    } else {
+      x = S2.xEnd;
+      const sleepy = t > 2.42;
+      const blink = t > 2.3 && t < 2.37;
+      pose = { eyes: sleepy || blink ? 'closed' : 'open', arms: 'out', blush: sleepy, front: pencil() };
+      if (sleepy) { const b = Math.sin((t - 2.42) * 7); sx = 1 + .02 * b; sy = 1 - .025 * b; }
+    }
+    clawd.draw(pose);
+    const co = E.outCubic(seg(t, .08, .38));
+    clawd.at(x, feet, { sx, sy, o: co });
+    clawd.shadowAt(x, feet + 4, 0, co * .7, T.shadow);
+
+    // 睡着冒出的 Z
+    let z = '';
+    [[2.48, 9], [2.64, 12], [2.8, 15]].forEach(([t0, u], i) => {
+      const q = seg(t, t0, t0 + .7);
+      if (q <= 0) return;
+      const zx = x - 130 + i * 26 + q * 24, zy = feet - 8 * S2.u - 60 - i * 70 - q * 90;
+      z += `<g opacity="${(clamp(q * 4) * (1 - Math.pow(q, 4))).toFixed(3)}" transform="translate(${zx},${zy})">${bitmap(BM.z, u, th ? C.dAmber : C.accent)}</g>`;
+    });
+    zz.innerHTML = `<svg width="${W}" height="${H}" shape-rendering="crispEdges">${z}</svg>`;
+
+    brand(t, th);
+  };
+}
+
+function scene2() {
+  const light = el('div', 'abs', stage), dark = el('div', 'abs', stage);
+  const L = diaryLayer(light, 0), D = diaryLayer(dark, 1);
+  return t => {
+    const R = 2250 * E.inOutCubic(seg(t, .3, .95));
+    L(t); D(t);
+    dark.style.visibility = R > .5 ? 'visible' : 'hidden';
+    dark.style.clipPath = `circle(${R.toFixed(1)}px at ${S2.BX}px ${S2.BY}px)`;
+  };
+}
+
+// ================================================================ 3 · 学习（背单词）
+function scene3() {
+  stage.style.background = C.canvas;
+  const bg = svgLayer(stage);
+  const sparkles = makeSparkles(31, 12, [60, 660, 1020, 1500], [[90, 800, 990, 1280]]);
+
+  const head = el('div', 'abs', stage);
+  Object.assign(head.style, { width: W + 'px', textAlign: 'center' });
+  head.innerHTML = `<div class="cn-serif" style="font-size:72px;font-weight:700;letter-spacing:.12em">背单词</div>` +
+    `<div style="margin-top:12px;font-size:38px;color:${C.muted};letter-spacing:.08em">四级核心词 · 第 3 组</div>`;
+  const prog = el('div', 'abs', stage);
+
+  const TX = 90, TY = 860, LW = 180, CW = 240, RH = 190;
+  const words = [['focus', '专注'], ['habit', '习惯'], ['grow', '成长']];
+  const table = el('div', 'card', stage);
+  Object.assign(table.style, { left: TX + 'px', top: TY + 'px', width: (LW + 3 * CW) + 'px', height: (2 * RH) + 'px', borderRadius: '32px', overflow: 'hidden' });
+  let th = `<svg class="abs" width="${LW + 3 * CW}" height="${2 * RH}"><rect width="${LW}" height="${2 * RH}" fill="${C.sidebar}"/>` +
+    `<line x1="0" y1="${RH}" x2="${LW + 3 * CW}" y2="${RH}" stroke="rgba(20,20,19,.10)" stroke-width="2"/>`;
+  for (let c = 0; c < 3; c++) th += `<line x1="${LW + c * CW}" y1="0" x2="${LW + c * CW}" y2="${2 * RH}" stroke="rgba(20,20,19,.10)" stroke-width="2"/>`;
+  th += `</svg>`;
+  table.innerHTML = th + ['单词', '释义'].map((l, r) => `<div class="abs" style="left:0;top:${r * RH}px;width:${LW}px;height:${RH}px;line-height:${RH}px;text-align:center;font-size:40px;font-weight:600;color:${C.text2}">${l}</div>`).join('');
+  const wordEls = words.map(([w], c) => {
+    const e = el('div', 'abs', table);
+    Object.assign(e.style, { left: (LW + c * CW) + 'px', top: '0px', width: CW + 'px', height: RH + 'px' });
+    e.innerHTML = `<div style="position:absolute;left:0;right:0;top:56px;text-align:center;font-family:LSerif;font-size:60px;font-weight:600;color:${C.text}">${w}</div><div class="cb" style="position:absolute;right:14px;top:14px;width:50px;height:50px"></div>`;
+    return e.querySelector('.cb');
+  });
+  const cellEls = words.map(([, m], c) => {
+    const e = el('div', 'abs', stage);
+    Object.assign(e.style, { width: CW + 'px', height: RH + 'px' });
+    e.innerHTML = `<div class="mask abs" style="left:14px;top:14px;width:${CW - 28}px;height:${RH - 28}px;border-radius:18px;background:${C.accent};box-shadow:inset 0 -10px 0 ${C.accentStrong};display:flex;align-items:center;justify-content:center;transform-origin:50% 50%">${bitmapSVG(BM.qmark, 13, C.canvas)}</div>` +
+      `<div class="mean abs cn-serif" style="left:14px;top:14px;width:${CW - 28}px;height:${RH - 28}px;border-radius:18px;background:${C.accentSoft};line-height:${RH - 28}px;text-align:center;font-size:62px;font-weight:700;color:${C.accentStrong};transform-origin:50% 50%">${m}</div>`;
+    return { e, mask: e.querySelector('.mask'), mean: e.querySelector('.mean') };
+  });
+
+  const clawd = new Clawd(stage, 26);
+  const fx = svgLayer(stage);
+  const brand = makeBrand('遮住它，再翻开它');
+
+  const floorY = 1760;
+  const colX = c => TX + LW + c * CW + CW / 2;
+  const maskBottom = TY + 2 * RH - 14;
+  const jumpH = floorY - 10 * 26 - maskBottom; // 举手时顶点正好碰到遮挡块
+  const cycles = [{ w0: .1, w1: .55, from: -220 }, { w0: .95, w1: 1.15 }, { w0: 1.55, w1: 1.75 }];
+  const J = .4; // 一次起跳的时长
+  const bonk = cycles.map(cy => cy.w1 + J / 2);
+  const coin = `<circle cx="0" cy="0" r="40" fill="${C.green}"/><g transform="translate(-24,-18)" shape-rendering="crispEdges">${bitmap(BM.check, 6, '#fff')}</g>`;
+  const confetti = makeBurst(17, 30, { a0: -Math.PI * .9, a1: -Math.PI * .1, v0: 600, v1: 1200, s0: 10, s1: 20, l0: .6, l1: .9, colors: [C.accent, C.green, C.mark, C.dAmber] });
+
+  return t => {
+    bg(sparklesSVG(sparkles, t, C.mark, E.outCubic(seg(t, .1, .6))));
+    const hp = E.outCubic(seg(t, 0, .4));
+    place(head, 0, 290 + (1 - hp) * 26, { o: hp });
+
+    const revealed = bonk.filter(b => t >= b + .1).length;
+    const pv = bonk.reduce((a, b) => a + E.outCubic(seg(t, b + .05, b + .3)), 0) / 3;
+    const allDone = t >= bonk[2] + .35;
+    prog.innerHTML = `<div style="width:640px;display:flex;align-items:center;gap:28px"><div style="flex:1;height:22px;border-radius:11px;background:${C.subtle};overflow:hidden"><div style="height:100%;width:${pv * 100}%;border-radius:11px;background:${allDone ? C.green : C.accent}"></div></div>` +
+      `<div style="font-size:38px;font-weight:600;color:${allDone ? C.green : C.text2};min-width:120px">${revealed} / 3</div></div>`;
+    place(prog, 220, 530 + (1 - hp) * 26, { o: E.outCubic(seg(t, .08, .45)) });
+
+    const tp = E.outBack(seg(t, .02, .45));
+    const ty = (1 - tp) * -80;
+    place(table, 0, ty, { o: clamp(seg(t, .02, .2)) });
+    cellEls.forEach((ce, c) => {
+      const b = bonk[c];
+      const bump = t >= b ? -26 * Math.sin(Math.PI * seg(t, b, b + .16)) : 0;
+      place(ce.e, TX + LW + c * CW, TY + RH + ty + bump, { o: clamp(seg(t, .02, .2)) });
+      const f = seg(t, b, b + .2);
+      ce.mask.style.transform = `scaleY(${f < .5 ? 1 - f * 2 : 0})`;
+      ce.mean.style.transform = `scaleY(${f < .5 ? 0 : E.outBack((f - .5) * 2)})`;
+      ce.mask.style.visibility = f < .5 ? 'visible' : 'hidden';
+      ce.mean.style.visibility = f < .5 ? 'hidden' : 'visible';
+      const ticked = t >= b + .32;
+      const tk = E.outBack(seg(t, b + .32, b + .48));
+      wordEls[c].innerHTML = ticked
+        ? `<svg width="50" height="50" viewBox="0 0 40 40"><g transform="translate(20 20) scale(${tk}) translate(-20 -20)"><rect x="1" y="1" width="38" height="38" rx="10" fill="${C.green}"/><path d="M11 21 L18 28 L30 13" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></g></svg>`
+        : `<svg width="50" height="50" viewBox="0 0 40 40"><rect x="3" y="3" width="34" height="34" rx="9" fill="none" stroke="${C.muted}" stroke-opacity=".6" stroke-width="4"/></svg>`;
+    });
+
+    // 小卵包：走到格子下 → 起跳顶开遮挡 → 下一格
+    let x = colX(0), y = floorY, sx = 1, sy = 1, pose = { eyes: 'open', arms: 'out', legs: 'stand', lookY: -.25 };
+    let lift = 0;
+    for (let c = 0; c < 3; c++) {
+      const cy = cycles[c], from = c === 0 ? cy.from : colX(c - 1);
+      if (t >= cy.w0 && t < cy.w1) {
+        x = lerp(from, colX(c), E.inOutSine(seg(t, cy.w0, cy.w1)));
+        const step = Math.floor((t - cy.w0) / .08) % 2;
+        pose = { eyes: 'open', look: .3, lookY: -.1, arms: 'out', legs: step ? 'a' : 'b' };
+      } else if (t >= cy.w1 && t < cy.w1 + J) {
+        const p = seg(t, cy.w1, cy.w1 + J);
+        x = colX(c);
+        lift = arc(p, jumpH);
+        y = floorY - lift;
+        pose = { eyes: p > .4 && p < .6 ? 'squint' : 'open', lookY: -.3, arms: 'high', legs: 'tuck' };
+        if (p < .12) { sx = 1.15; sy = .85; } else if (p < .5) { sx = .92; sy = 1.08; }
+      } else if (t >= cy.w1 + J && (c === 2 || t < cycles[c + 1].w0)) {
+        x = colX(c);
+        const p = seg(t, cy.w1 + J, cy.w1 + J + .14);
+        const sq = Math.sin(Math.PI * p);
+        sx = 1 + .12 * sq; sy = 1 - .12 * sq;
+        pose = { eyes: 'happy', arms: 'out', legs: 'stand' };
+      }
+    }
+    if (t < cycles[0].w0) x = cycles[0].from;
+    // 全部翻开后：原地欢呼小跳
+    const cel0 = bonk[2] + J / 2 + .12;
+    if (t >= cel0) {
+      const p = seg(t, cel0, cel0 + .5);
+      x = lerp(colX(2), W / 2, E.inOutSine(p));
+      lift = arc(p, 150); y = floorY - lift;
+      pose = { eyes: 'happy', arms: 'up', legs: p > 0 && p < 1 ? 'tuck' : 'stand', blush: true, look: p < 1 ? -.3 : 0 };
+      if (p >= 1) { const sq = Math.sin(Math.PI * seg(t, cel0 + .5, cel0 + .64)); sx = 1 + .12 * sq; sy = 1 - .12 * sq; }
+    }
+    clawd.draw(pose);
+    clawd.at(x, y, { sx, sy });
+    clawd.shadowAt(x, floorY, lift);
+
+    // 勾选硬币：从被顶开的格子里弹出、飞进单词格的复选框
+    let f = '';
+    bonk.forEach((b, c) => {
+      const q = seg(t, b, b + .34);
+      if (q <= 0 || q >= 1) return;
+      const x0 = colX(c), y0 = TY + RH + ty + 40;
+      const x1 = TX + LW + c * CW + CW - 39, y1 = TY + ty + 39;
+      const cx = lerp(x0, x1, E.inOutCubic(q)), cyy = lerp(y0, y1, E.inOutCubic(q)) - arc(q, 140);
+      const s = q < .8 ? 1 : 1 - (q - .8) * 4;
+      f += `<g transform="translate(${cx},${cyy}) scale(${s})">${coin}</g>`;
+    });
+    f += burstSVG(confetti, colX(1), TY + 2 * RH + ty, t - (bonk[2] + .3));
+    f = `<g>${f}</g>`;
+    fx(f + `<line x1="140" y1="${floorY + 2}" x2="940" y2="${floorY + 2}" stroke="${C.pressed}" stroke-width="4" stroke-dasharray="14 18" stroke-linecap="round"/>`);
+
+    brand(t);
+  };
+}
+
+// ================================================================ 4 · 统计（连续打卡 → 休息卡）
+function scene4() {
+  stage.style.background = `linear-gradient(${C.canvas} 0%, ${C.canvas} 55%, ${C.accentSoft} 100%)`;
+  const bg = svgLayer(stage);
+  const sparkles = makeSparkles(41, 14, [60, 700, 1020, 1400], [[160, 780, 520, 1360]]);
+
+  const head = el('div', 'abs', stage);
+  Object.assign(head.style, { width: W + 'px', textAlign: 'center' });
+  head.innerHTML = `<div class="cn-serif" style="font-size:56px;font-weight:700;letter-spacing:.14em;color:${C.text2}">连续打卡</div>`;
+  const num = el('div', 'abs', stage);
+  const unit = el('div', 'abs cn-serif', stage, '天');
+  Object.assign(unit.style, { fontSize: '84px', fontWeight: 700, color: C.accent });
+  const sub = el('div', 'abs', stage);
+  Object.assign(sub.style, { width: W + 'px', textAlign: 'center', fontSize: '36px', color: C.muted, letterSpacing: '.06em' });
+  sub.innerHTML = `最长 12 天 <span style="opacity:.4;margin:0 14px">|</span> 累计 86 天 <span style="opacity:.4;margin:0 14px">|</span> 学习 38 小时`;
+
+  const chart = svgLayer(stage);
+  const labels = ['一', '二', '三', '四', '五'].map(d => {
+    const e = el('div', 'abs', stage, '周' + d);
+    Object.assign(e.style, { width: '140px', textAlign: 'center', fontSize: '34px', color: C.muted });
+    return e;
+  });
+  const vals = ['0.8h', '1.4h', '2.1h', '2.6h', '3.2h'];
+  const card = el('div', 'abs', stage, `<img src="${ASSET}rest_card_full.png" width="300" height="429" style="display:block;border-radius:22px;box-shadow:0 24px 60px rgba(169,78,51,.28)">`);
+  card.style.transformOrigin = '150px 214px';
+  const tag = el('div', 'pill', stage, `+1 休息卡`);
+  Object.assign(tag.style, { width: '260px', height: '80px', fontSize: '38px', color: C.accentStrong, background: C.accentSoft, border: `2px solid rgba(198,97,63,.3)` });
+  const clawd = new Clawd(stage, 17);
+  const fx = svgLayer(stage);
+  const brand = makeBrand('每一天，都算数');
+
+  const base = 1790, BW = 140, slot = 170;
+  const bx = i => 115 + slot * i + slot / 2;
+  const bh = [170, 280, 390, 500, 610];
+  const top = i => base - bh[i];
+  const land = [.52, .92, 1.27, 1.62, 1.97];
+  const HOP = .3;
+  const cardT = 2.06;
+  const burst = makeBurst(51, 34, { a0: -Math.PI, a1: 0, v0: 400, v1: 1000, s0: 10, s1: 20, l0: .6, l1: .95, colors: [C.accent, C.mark, C.dAmber, C.clawd, C.green] });
+
+  return t => {
+    bg(sparklesSVG(sparkles, t, C.mark, E.outCubic(seg(t, .1, .6))));
+    const hp = E.outCubic(seg(t, 0, .4));
+    place(head, 0, 250 + (1 - hp) * 24, { o: hp });
+
+    const n = land.filter(l => t >= l).length;
+    const lastL = n ? land[n - 1] : 0;
+    const pop = n ? 1 + .22 * Math.sin(Math.PI * seg(t, lastL, lastL + .2)) : 1;
+    const d = pixelDigits(String(n), 26, C.accent);
+    num.innerHTML = d.svg;
+    num.style.transformOrigin = `${d.w / 2}px ${d.h}px`;
+    const gw = d.w + 20 + 84;
+    place(num, (W - gw) / 2, 370 + (1 - hp) * 24, { s: pop, o: hp });
+    place(unit, (W - gw) / 2 + d.w + 20, 370 + d.h - 112 + (1 - hp) * 24, { o: hp });
+    place(sub, 0, 560 + (1 - hp) * 24, { o: E.outCubic(seg(t, .08, .45)) });
+
+    // 柱状图台阶
+    let s = `<line x1="110" y1="${base}" x2="970" y2="${base}" stroke="${C.pressed}" stroke-width="4" stroke-linecap="round"/>`;
+    for (let i = 0; i < 5; i++) {
+      const g = E.outBack(seg(t, .02 + i * .06, .4 + i * .06));
+      const hgt = bh[i] * g, x0 = bx(i) - BW / 2;
+      const lit = seg(t, land[i] - .02, land[i] + .1);
+      const fill = mix(C.subtle, C.green, lit);
+      s += `<rect x="${x0}" y="${base - hgt}" width="${BW}" height="${hgt}" rx="14" fill="${fill}"/>`;
+      if (lit > 0) s += `<rect x="${x0}" y="${base - hgt}" width="${BW}" height="16" rx="8" fill="#8FB69D" opacity="${lit}"/>`;
+      const fl = seg(t, land[i], land[i] + .3);
+      if (fl > 0 && fl < 1) s += `<rect x="${x0 - 10 * fl}" y="${base - hgt - 10 * fl}" width="${BW + 20 * fl}" height="${hgt + 10 * fl}" rx="18" fill="none" stroke="${C.green}" stroke-width="${6 * (1 - fl)}" opacity="${1 - fl}"/>`;
+      if (lit > .5 && hgt > 120) s += `<text x="${bx(i)}" y="${base - 40}" text-anchor="middle" font-family="LSans" font-size="32" font-weight="600" fill="#FFFFFF" opacity="${(lit - .5) * 2}">${vals[i]}</text>`;
+      place(labels[i], bx(i) - 70, base + 26, { o: clamp(seg(t, .1 + i * .05, .4 + i * .05)) });
+    }
+    chart(s);
+
+    // 小卵包：落到周一 → 一格一格往上跳
+    let x = bx(0), y = top(0), sx = 1, sy = 1, lift = 0, groundY = top(0);
+    let pose = { eyes: 'open', arms: 'out', legs: 'stand', look: .25, lookY: -.15 };
+    if (t < land[0]) {
+      const p = seg(t, .18, land[0]);
+      y = lerp(-100, top(0), E.inQuad(p)); lift = top(0) - y;
+      sx = .9; sy = 1.1; pose = { eyes: 'wide', arms: 'high', legs: 'tuck', lookY: .25 };
+    } else {
+      for (let i = 1; i < 5; i++) {
+        const t0 = land[i] - HOP;
+        if (t >= t0 && t < land[i]) {
+          const p = seg(t, t0, land[i]);
+          x = lerp(bx(i - 1), bx(i), p);
+          const yy = lerp(top(i - 1), top(i), p) - arc(p, 130);
+          y = yy; groundY = p < .5 ? top(i - 1) : top(i); lift = groundY - y;
+          pose = { eyes: 'open', arms: 'high', legs: 'tuck', look: .3, lookY: -.2 };
+          if (p < .5) { sx = .92; sy = 1.08; }
+        } else if (t >= land[i] || (i === 1 && t < t0)) {
+          const k = t >= land[i] ? i : 0;
+          x = bx(k); y = top(k); groundY = y;
+          const sq = Math.sin(Math.PI * seg(t, land[k], land[k] + .14));
+          sx = 1 + .14 * sq; sy = 1 - .14 * sq;
+          pose = { eyes: 'happy', arms: 'out', legs: 'stand', look: .2 };
+        }
+      }
+    }
+    if (t >= cardT) {
+      const sq = Math.sin(Math.PI * seg(t, 2.6, 2.75));
+      pose = { eyes: 'happy', arms: 'up', legs: 'stand', blush: true, look: -.35, lookY: -.2 };
+      sx = 1 + .06 * sq; sy = 1 - .06 * sq;
+    }
+    clawd.draw(pose);
+    clawd.at(x, y, { sx, sy, o: t < .18 ? 0 : 1 });
+    clawd.shadowAt(x, groundY, lift, t < .18 ? 0 : 1);
+
+    // 满 5 天：休息卡从小卵包身上飞出，落在左上
+    const cq = seg(t, cardT, cardT + .5);
+    if (cq > 0) {
+      const x0 = bx(4), y0 = top(4) - 80, x1 = 330, y1 = 1120;
+      const e = E.outCubic(cq);
+      const cx = lerp(x0, x1, e), cyy = lerp(y0, y1, e) - arc(e, 240);
+      const flip = Math.cos(Math.PI * 2 * clamp(cq * 1.1));
+      const float = Math.sin((t - cardT) * 5) * 8;
+      card.style.transform = `translate(${cx - 150}px,${cyy - 214 + float}px) rotate(${lerp(30, -4, e)}deg) scale(${lerp(.15, 1, E.outBack(cq)) * Math.max(.04, Math.abs(flip))},${lerp(.15, 1, E.outBack(cq))})`;
+      card.style.opacity = clamp(cq * 4);
+    } else card.style.opacity = 0;
+    const tq = E.outBack(seg(t, cardT + .4, cardT + .62));
+    place(tag, 200, 790, { s: tq, o: clamp(tq) });
+    tag.style.transformOrigin = '130px 40px';
+
+    let f = burstSVG(burst, 330, 1120, t - (cardT + .42), 1600);
+    fx(f);
+
+    brand(t);
+  };
+}
+
+// ---------------------------------------------------------------- 启动
+const builders = { 1: scene1, 2: scene2, 3: scene3, 4: scene4 };
+const seek = builders[SCENE]();
+
+async function ready() {
+  const texts = '小卵包今天的事一件一件做完把写进稿纸里遮住它再翻开背单词四级核心词第组连续打卡天最长累计学习小时周一二三四五日记随想月日星期十晴也辛苦啦专注习惯成长释义完成中已分钟个休息卡计时·，0123456789focushabitgrow';
+  await Promise.all([
+    document.fonts.load('700 100px LSerif', texts), document.fonts.load('500 60px LSerif', texts),
+    document.fonts.load('400 40px LSans', texts), document.fonts.load('600 40px LSans', texts),
+  ]);
+  await document.fonts.ready;
+  seek(0);
+  await Promise.all([...document.images].map(img => img.complete ? null : new Promise(r => { img.onload = img.onerror = r; })));
+  // 预热会被换掉的图片
+  for (const src of ['ic_theme_light.png', 'ic_theme_dark.png', 'rest_card_full.png']) {
+    const im = new Image(); im.src = ASSET + src; await im.decode().catch(() => {});
+  }
+}
+
+window.__duration = DURATION;
+window.__seek = t => { seek(t); };
+ready().then(() => {
+  window.__ready = true;
+  if (params.has('t')) seek(Number(params.get('t')));
+  if (params.has('play')) {
+    document.body.classList.add('play');
+    const fit = () => { stage.style.transform = `scale(${innerHeight / H})`; document.body.style.width = '100vw'; };
+    fit(); addEventListener('resize', fit);
+    const t0 = performance.now();
+    const loop = now => { seek(((now - t0) / 1000) % (DURATION + .6) > DURATION ? DURATION : ((now - t0) / 1000) % (DURATION + .6)); requestAnimationFrame(loop); };
+    requestAnimationFrame(loop);
+  }
+});
+</script>
+</body>
+</html>

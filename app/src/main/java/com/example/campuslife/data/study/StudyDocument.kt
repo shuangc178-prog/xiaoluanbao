@@ -32,12 +32,19 @@ data class StudyDocument(
     val scrollY: Int = 0,
     val progress: Float = 0f,
     val category: StudyCategory = StudyCategory.Notes,
+    /** 背单词遮挡的已编码状态，见 [VocabularyTableMaskState]；未遮挡或已过期时为空。 */
+    val vocabularyMask: String? = null,
+    /** 阅读器里被勾选的复选框，见 [TaskCheckboxState]；没有勾选时为空。 */
+    val taskCheckboxState: String? = null,
 )
 
 data class StudyImportResult(
     val importedCount: Int,
+    val replacedCount: Int = 0,
     val skippedDuplicates: Int = 0,
     val errors: List<String> = emptyList(),
+    val resourceFolderMessage: String? = null,
 ) {
-    val hasImportedDocuments: Boolean get() = importedCount > 0
+    val hasImportedDocuments: Boolean get() = importedCount > 0 || replacedCount > 0
+    val requiresResourceFolder: Boolean get() = resourceFolderMessage != null
 }

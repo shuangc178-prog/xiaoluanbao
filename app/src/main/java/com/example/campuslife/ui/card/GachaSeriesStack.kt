@@ -1,5 +1,14 @@
 package com.example.campuslife.ui.card
 
+import androidx.compose.runtime.State
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import com.example.campuslife.ui.theme.pressBounce
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -283,10 +292,32 @@ private fun SeriesCard(
     }
 
     if (onClick != null) {
+        val interactionSource = remember { MutableInteractionSource() }
+        // 能抽时轻轻「呼吸」，提示可以点；只在绘制层读值，不逐帧重组。
+        val breathe: State<Float>? = if (canDraw) {
+            rememberInfiniteTransition(label = "gachaBreathe").animateFloat(
+                initialValue = 1f,
+                targetValue = 1.035f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 1100, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse,
+                ),
+                label = "gachaBreatheScale",
+            )
+        } else {
+            null
+        }
         Surface(
             onClick = onClick,
             enabled = canDraw,
-            modifier = cardModifier,
+            interactionSource = interactionSource,
+            modifier = cardModifier
+                .graphicsLayer {
+                    val s = breathe?.value ?: 1f
+                    scaleX = s
+                    scaleY = s
+                }
+                .pressBounce(interactionSource, pressedScale = 0.94f),
             shape = shape,
             color = MaterialTheme.claude.accentSoft,
             border = border,

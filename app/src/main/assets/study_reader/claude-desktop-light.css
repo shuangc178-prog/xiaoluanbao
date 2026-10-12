@@ -1,0 +1,484 @@
+/*
+ * 小卵包 Markdown 阅读器 · Claude Desktop Light
+ *
+ * 阅读排版与令牌移植自本机 Typora 1.12.4 的 Claude Desktop 主题维护源：
+ * F:/Typora/resources/appsrc/custom/themes/claude-desktop-light.css
+ * F:/Typora/resources/appsrc/custom/themes/claude-desktop/claude-desktop-base.css
+ *
+ * 这里只保留只读文档所需规则；不包含 Typora 编辑器、侧栏和窗口控件。
+ */
+
+:root {
+  color-scheme: light;
+  --claude-canvas: #faf9f5;
+  --claude-panel: #ffffff;
+  --claude-sidebar: #f5f4ed;
+  --claude-subtle: #f0eee6;
+  --claude-pressed: #e8e6dc;
+  --claude-text: #141413;
+  --claude-text-secondary: #3d3d3a;
+  --claude-muted: #73726c;
+  --claude-border: rgba(20, 20, 19, 0.12);
+  --claude-border-strong: rgba(20, 20, 19, 0.2);
+  --claude-accent: #c6613f;
+  --claude-accent-hover: #a94e33;
+  --claude-link: #a94e33;
+  --claude-link-hover: #8f442e;
+  --claude-accent-line: rgba(198, 97, 63, 0.45);
+  --claude-accent-soft: rgba(198, 97, 63, 0.12);
+  --claude-selection: rgba(217, 119, 87, 0.28);
+  --claude-selection-text: #141413;
+  --claude-mark: #f4ddb5;
+  --claude-row-hover: rgba(20, 20, 19, 0.025);
+  --claude-item-hover: rgba(20, 20, 19, 0.06);
+  --claude-code-bg: #f0eee6;
+  --claude-code-inline-bg: #f0eee6;
+  --claude-code-inline-text: #8f442e;
+  --claude-code-text: #2e2e2b;
+  --claude-code-border: rgba(20, 20, 19, 0.11);
+  --claude-syntax-comment: #7d7b74;
+  --claude-syntax-keyword: #a94e33;
+  --claude-syntax-string: #4f725e;
+  --claude-syntax-number: #755985;
+  --claude-syntax-variable: #315f7d;
+  --claude-syntax-property: #7d591d;
+  --claude-danger: #b6483d;
+  --claude-danger-soft: rgba(182, 72, 61, 0.1);
+  --claude-scrollbar: rgba(61, 61, 58, 0.28);
+  --claude-scrollbar-hover: rgba(61, 61, 58, 0.44);
+  --claude-shadow-key: rgba(20, 20, 19, 0.16);
+  --claude-shadow-soft: 0 1px 2px rgba(20, 20, 19, 0.035);
+  --claude-shadow-media: 0 8px 28px rgba(20, 20, 19, 0.09);
+  --claude-shadow-popover: 0 14px 36px rgba(20, 20, 19, 0.14),
+    0 2px 8px rgba(20, 20, 19, 0.08);
+  --claude-ui-font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Microsoft YaHei UI", "PingFang SC", "Noto Sans SC", sans-serif;
+  --claude-prose-font: Georgia, "Noto Serif SC", "Source Han Serif SC",
+    "Songti SC", SimSun, serif;
+  --claude-mono-font: "Cascadia Mono", "SFMono-Regular", Consolas,
+    "Liberation Mono", "JetBrains Mono", monospace;
+  --claude-content-width: 790px;
+  --ty-annotation-yellow: rgba(255, 224, 110, 0.42);
+  --ty-annotation-yellow-strong: rgba(255, 214, 74, 0.58);
+  --ty-annotation-ring: rgba(230, 174, 20, 0.2);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background: var(--claude-canvas);
+  font-size: 16px;
+}
+
+body {
+  min-height: 100%;
+  margin: 0;
+  color: var(--claude-text);
+  background: var(--claude-canvas);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  color: var(--claude-selection-text);
+  background: var(--claude-selection);
+}
+
+#write {
+  box-sizing: border-box;
+  max-width: var(--claude-content-width);
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 3.5rem 4rem 7rem;
+  color: var(--claude-text);
+  font-family: var(--claude-prose-font);
+  font-size: 1.04rem;
+  font-kerning: normal;
+  line-height: 1.74;
+  overflow-wrap: break-word;
+}
+
+#write > :first-child {
+  margin-top: 0;
+}
+
+#write > :last-child {
+  margin-bottom: 0;
+}
+
+#write p,
+#write blockquote,
+#write ul,
+#write ol,
+#write table,
+#write pre {
+  margin-top: 0.9em;
+  margin-bottom: 0.9em;
+}
+
+#write h1,
+#write h2,
+#write h3,
+#write h4,
+#write h5,
+#write h6 {
+  position: relative;
+  margin: 1.85em 0 0.65em;
+  color: var(--claude-text);
+  font-family: var(--claude-prose-font);
+  font-weight: 600;
+  line-height: 1.24;
+  letter-spacing: -0.018em;
+}
+
+#write h1 {
+  margin-top: 0.5em;
+  font-size: 2.22rem;
+  font-weight: 500;
+  letter-spacing: -0.032em;
+}
+
+#write h2 {
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--claude-border);
+  font-size: 1.65rem;
+  font-weight: 550;
+}
+
+#write h3 { font-size: 1.31rem; }
+#write h4 { font-size: 1.1rem; }
+#write h5 { color: var(--claude-text-secondary); font-size: 0.98rem; }
+#write h6 {
+  color: var(--claude-muted);
+  font-family: var(--claude-ui-font);
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+#write a {
+  color: var(--claude-link);
+  text-decoration-color: var(--claude-accent-line);
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+
+#write a:hover {
+  color: var(--claude-link-hover);
+  text-decoration-color: currentColor;
+}
+
+#write strong { color: var(--claude-text); font-weight: 700; }
+#write em { color: var(--claude-text-secondary); }
+#write del { color: var(--claude-muted); text-decoration-color: var(--claude-muted); }
+
+#write mark {
+  margin: 0 -0.06em;
+  padding: 0.06em 0.17em;
+  border-radius: 4px;
+  color: var(--claude-text);
+  background: var(--claude-mark);
+}
+
+#write hr {
+  height: 1px;
+  margin: 2.5rem 0;
+  border: 0;
+  background: var(--claude-border);
+}
+
+#write ul,
+#write ol { padding-left: 1.65em; }
+#write li { margin: 0.22em 0; padding-left: 0.12em; }
+#write li::marker {
+  color: var(--claude-accent);
+  font-family: var(--claude-ui-font);
+  font-weight: 650;
+}
+#write li > p { margin: 0.3em 0; }
+#write .task-list-item { position: relative; list-style: none; }
+#write .task-list-item > input[type="checkbox"] {
+  accent-color: var(--claude-accent);
+  /* 默认按只读正文呈现；task-checkbox.css 只会为小卵包接管的任务框重新开启点击。 */
+  pointer-events: none;
+}
+
+#write blockquote {
+  padding: 0.85rem 1.05rem 0.85rem 1.15rem;
+  border: 1px solid var(--claude-border);
+  border-left: 3px solid var(--claude-accent);
+  border-radius: 0 12px 12px 0;
+  color: var(--claude-text-secondary);
+  background: var(--claude-panel);
+  box-shadow: var(--claude-shadow-soft);
+}
+#write blockquote > :first-child { margin-top: 0; }
+#write blockquote > :last-child { margin-bottom: 0; }
+#write blockquote blockquote { background: var(--claude-subtle); box-shadow: none; }
+
+#write table {
+  width: 100%;
+  border: 1px solid var(--claude-border);
+  border-collapse: separate;
+  border-radius: 12px;
+  border-spacing: 0;
+  background: var(--claude-panel);
+  box-shadow: var(--claude-shadow-soft);
+  font-family: var(--claude-ui-font);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  overflow: hidden;
+}
+
+#write table th,
+#write table td {
+  min-width: 2rem;
+  padding: 0.68rem 0.8rem;
+  border: 0;
+  border-right: 1px solid var(--claude-border);
+  border-bottom: 1px solid var(--claude-border);
+  text-align: left;
+  vertical-align: top;
+}
+#write table th:last-child,
+#write table td:last-child { border-right: 0; }
+#write table tr:last-child td { border-bottom: 0; }
+#write table thead th {
+  color: var(--claude-text);
+  background: var(--claude-subtle);
+  font-weight: 650;
+}
+#write table tbody tr:hover { background: var(--claude-row-hover); }
+
+#write code,
+#write tt,
+#write kbd,
+#write samp,
+#write pre {
+  font-family: var(--claude-mono-font);
+}
+
+#write :not(pre) > code,
+#write tt {
+  padding: 0.12em 0.34em;
+  border: 1px solid var(--claude-code-border);
+  border-radius: 5px;
+  color: var(--claude-code-inline-text);
+  background: var(--claude-code-inline-bg);
+  font-size: 0.86em;
+  white-space: break-spaces;
+}
+
+#write pre {
+  box-sizing: border-box;
+  overflow-x: auto;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--claude-code-border);
+  border-radius: 12px;
+  color: var(--claude-code-text);
+  background: var(--claude-code-bg);
+  box-shadow: var(--claude-shadow-soft);
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: 0;
+  tab-size: 4;
+}
+
+#write pre code {
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font-size: inherit;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
+.cm-s-inner .cm-comment { color: var(--claude-syntax-comment); font-style: italic; }
+.cm-s-inner .cm-keyword,
+.cm-s-inner .cm-operator,
+.cm-s-inner .cm-tag { color: var(--claude-syntax-keyword); }
+.cm-s-inner .cm-string,
+.cm-s-inner .cm-string-2 { color: var(--claude-syntax-string); }
+.cm-s-inner .cm-number,
+.cm-s-inner .cm-atom,
+.cm-s-inner .cm-builtin { color: var(--claude-syntax-number); }
+.cm-s-inner .cm-variable,
+.cm-s-inner .cm-variable-2,
+.cm-s-inner .cm-variable-3 { color: var(--claude-syntax-variable); }
+.cm-s-inner .cm-property,
+.cm-s-inner .cm-attribute,
+.cm-s-inner .cm-def { color: var(--claude-syntax-property); }
+.cm-s-inner .cm-meta,
+.cm-s-inner .cm-qualifier,
+.cm-s-inner .cm-bracket { color: var(--claude-muted); }
+.cm-s-inner .cm-header,
+.cm-s-inner .cm-link { color: var(--claude-link); }
+.cm-s-inner .cm-error {
+  color: var(--claude-danger);
+  background: var(--claude-danger-soft);
+}
+
+#write img,
+#write video {
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+  box-shadow: var(--claude-shadow-media);
+}
+#write figure { margin: 1.4rem 0; }
+#write figcaption {
+  color: var(--claude-muted);
+  font-family: var(--claude-ui-font);
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+#write .study-image-missing {
+  display: flex;
+  width: 100%;
+  min-height: 92px;
+  margin: 1.1rem 0;
+  padding: 1rem 1.1rem;
+  border: 1px dashed var(--claude-border-strong);
+  border-radius: 12px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.38rem;
+  color: var(--claude-text-secondary);
+  background: var(--claude-panel);
+  box-shadow: var(--claude-shadow-soft);
+  font-family: var(--claude-ui-font);
+}
+
+#write .study-image-missing strong {
+  color: var(--claude-text);
+  font-size: 0.92rem;
+}
+
+#write .study-image-missing code {
+  color: var(--claude-muted);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-size: 0.76rem;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+#write kbd {
+  display: inline-block;
+  min-width: 1.7em;
+  padding: 0.08em 0.4em;
+  border: 1px solid var(--claude-border-strong);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  color: var(--claude-text-secondary);
+  background: var(--claude-panel);
+  box-shadow: 0 1px 0 var(--claude-shadow-key);
+  font-family: var(--claude-ui-font);
+  font-size: 0.78em;
+  line-height: 1.5;
+}
+
+#write mark.typora-annotation {
+  cursor: pointer;
+  background: linear-gradient(
+    to bottom,
+    transparent 8%,
+    var(--ty-annotation-yellow) 8%,
+    var(--ty-annotation-yellow) 89%,
+    transparent 89%
+  );
+  box-shadow: inset 0 -0.08em 0 rgba(221, 163, 4, 0.1);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  transition: background-color 140ms ease, box-shadow 140ms ease;
+}
+
+#write mark.typora-annotation:hover,
+#write mark.typora-annotation:focus-visible,
+#write mark.typora-annotation[aria-expanded="true"] {
+  outline: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 6%,
+    var(--ty-annotation-yellow-strong) 6%,
+    var(--ty-annotation-yellow-strong) 91%,
+    transparent 91%
+  );
+  box-shadow: 0 0 0 2px var(--ty-annotation-ring),
+    inset 0 -0.08em 0 rgba(190, 132, 0, 0.14);
+}
+
+#study-annotation-card {
+  position: fixed;
+  z-index: 2147483646;
+  box-sizing: border-box;
+  min-width: 184px;
+  max-width: min(326px, calc(100vw - 24px));
+  padding: 10px 12px 10px 19px;
+  border: 1px solid var(--claude-border);
+  border-radius: 12px;
+  color: var(--claude-text);
+  background: var(--claude-panel);
+  box-shadow: var(--claude-shadow-popover);
+  font-family: var(--claude-ui-font);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  -webkit-font-smoothing: antialiased;
+  animation: study-annotation-in 130ms ease-out;
+}
+
+#study-annotation-card::before {
+  content: "";
+  position: absolute;
+  top: 11px;
+  bottom: 11px;
+  left: 10px;
+  width: 3px;
+  border-radius: 4px;
+  background: var(--ty-annotation-yellow-strong);
+}
+
+#study-annotation-card[hidden] { display: none; }
+
+@keyframes study-annotation-in {
+  from { opacity: 0; transform: translateY(-3px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: var(--claude-scrollbar);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--claude-scrollbar-hover);
+  background-clip: padding-box;
+}
+
+@media (max-width: 1000px) {
+  #write { padding-right: 2.6rem; padding-left: 2.6rem; }
+}
+
+@media (max-width: 640px) {
+  html { font-size: 15px; }
+  #write { padding: 2rem 1.35rem 5rem; }
+  #write h1 { font-size: 1.95rem; }
+  #write h2 { font-size: 1.48rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #study-annotation-card { animation: none; }
+}

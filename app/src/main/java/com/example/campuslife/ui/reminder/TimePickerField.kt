@@ -1,5 +1,9 @@
 package com.example.campuslife.ui.reminder
 
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.runtime.remember
+import com.example.campuslife.ui.theme.keyLip
+import com.example.campuslife.ui.theme.pressBounce
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -17,11 +21,11 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import com.example.campuslife.ui.components.ClaudeIconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.example.campuslife.ui.components.ClaudeTextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
@@ -47,9 +51,11 @@ internal fun TimePickerField(
     onClear: (() -> Unit)? = null,
 ) {
     val hasValue = minuteOfDay != null
+    val interactionSource = remember { MutableInteractionSource() }
     Surface(
         onClick = onPick,
-        modifier = modifier.fillMaxWidth(),
+        interactionSource = interactionSource,
+        modifier = modifier.fillMaxWidth().pressBounce(interactionSource, pressedScale = 0.97f),
         shape = RoundedCornerShape(12.dp),
         color = if (hasValue) {
             MaterialTheme.claude.accent.copy(alpha = 0.1f)
@@ -71,7 +77,16 @@ internal fun TimePickerField(
         ),
     ) {
         Row(
-            modifier = Modifier.padding(start = 12.dp, top = 8.dp, end = 6.dp, bottom = 8.dp),
+            modifier = Modifier
+                .keyLip(
+                    interactionSource = interactionSource,
+                    color = if (hasValue) {
+                        MaterialTheme.claude.accent.copy(alpha = 0.22f)
+                    } else {
+                        MaterialTheme.colorScheme.outlineVariant
+                    },
+                )
+                .padding(start = 12.dp, top = 8.dp, end = 6.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
@@ -91,7 +106,7 @@ internal fun TimePickerField(
                 style = MaterialTheme.typography.titleSmall,
             )
             if (onClear != null && hasValue) {
-                IconButton(
+                ClaudeIconButton(
                     onClick = onClear,
                     modifier = Modifier.size(32.dp),
                 ) {
@@ -155,10 +170,10 @@ internal fun TimePickerDialog(
                         .padding(top = 4.dp),
                     horizontalArrangement = Arrangement.End,
                 ) {
-                    TextButton(onClick = onDismiss) {
+                    ClaudeTextButton(onClick = onDismiss) {
                         Text("取消")
                     }
-                    TextButton(
+                    ClaudeTextButton(
                         onClick = { onConfirm(pickerState.hour * 60 + pickerState.minute) },
                     ) {
                         Text("确定")

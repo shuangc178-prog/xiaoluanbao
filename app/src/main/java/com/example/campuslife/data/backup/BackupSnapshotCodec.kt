@@ -14,7 +14,6 @@ import com.example.campuslife.data.plan.PlanTask
 import com.example.campuslife.data.study.StudyDocument
 import com.example.campuslife.data.study.StudyCategory
 import com.example.campuslife.data.study.StudyDocumentFormat
-import com.example.campuslife.data.study.StudyTaskState
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.InputStream
@@ -26,7 +25,7 @@ import java.io.OutputStream
  */
 internal object BackupSnapshotCodec {
     private const val MAGIC = 0x584C424B // ASCII: XLBK
-    private const val VERSION = 6
+    private const val VERSION = 8
     private const val MAX_COLLECTION_SIZE = 200_000
     private const val MAX_STRING_BYTES = 16 * 1024 * 1024
 
@@ -55,6 +54,10 @@ internal object BackupSnapshotCodec {
                     data.writeBoolean(task.isCompleted)
                     data.writeNullableInt(task.expectedStartMinute)
                     data.writeNullableInt(task.manualOrder)
+                    data.writeLong(task.learningElapsedMillis)
+                    data.writeBoolean(task.learningStartedAtEpochMillis != null)
+                    task.learningStartedAtEpochMillis?.let(data::writeLong)
+                    data.writeBoolean(task.hasLearningStarted)
                 }
             }
 
@@ -104,15 +107,8 @@ internal object BackupSnapshotCodec {
                 data.writeInt(document.scrollY)
                 data.writeFloat(document.progress)
                 data.writeText(document.category.name)
-            }
-
-            // v6 起：阅读器任务勾选的覆盖层。正文里已勾上的项不在这里，读回来仍按异或合并。
-            data.writeSize(snapshot.studyTaskStates.size)
-            snapshot.studyTaskStates.forEach { state ->
-                data.writeText(state.documentId)
-                data.writeSize(state.checkedIndexes.size)
-                state.checkedIndexes.sorted().forEach { index -> data.writeInt(index) }
-                data.writeText(state.sourceFingerprint)
+                data.writeText(document.vocabularyMask.orEmpty())
+                data.writeText(document.taskCheckboxState.orEmpty())
             }
 
             data.writeNullableBoolean(snapshot.darkTheme)
@@ -151,6 +147,11 @@ internal object BackupSnapshotCodec {
                             isCompleted = data.readBoolean(),
                             expectedStartMinute = data.readNullableInt(),
                             manualOrder = if (version >= 2) data.readNullableInt() else null,
+                            learningElapsedMillis = if (version >= 8) data.readLong() else 0L,
+                            learningStartedAtEpochMillis = if (version >= 8 && data.readBoolean()) {
+                                data.readLong()
+                            } else null,
+                            hasLearningStarted = version >= 8 && data.readBoolean(),
                         )
                     }
                     DailyPlan(epochDay = epochDay, tasks = tasks)
@@ -226,21 +227,19 @@ internal object BackupSnapshotCodec {
                         } else {
                             StudyCategory.Notes
                         },
+                        // v6 之前没有背单词遮挡状态，旧备份按“未遮挡”恢复。
+                        vocabularyMask = if (version >= 6) {
+                            data.readText().takeIf { it.isNotBlank() }
+                        } else {
+                            null
+                        },
+                        // v7 之前没有阅读器复选框状态，旧备份按“未勾选”恢复。
+                        taskCheckboxState = if (version >= 7) {
+                            data.readText().takeIf { it.isNotBlank() }
+                        } else {
+                            null
+                        },
                     )
-                }
-
-                val studyTaskStates = if (version >= 6) {
-                    List(data.readSize("学习资料任务状态")) {
-                        StudyTaskState(
-                            documentId = data.readText(),
-                            checkedIndexes = List(data.readSize("勾选的任务")) {
-                                data.readInt().coerceAtLeast(0)
-                            }.toSet(),
-                            sourceFingerprint = data.readText(),
-                        )
-                    }
-                } else {
-                    emptyList()
                 }
 
                 return AppBackupSnapshot(
@@ -250,7 +249,6 @@ internal object BackupSnapshotCodec {
                     cards = cards,
                     studyDocuments = studyDocuments,
                     darkTheme = data.readNullableBoolean(),
-                    studyTaskStates = studyTaskStates,
                 )
             }
         } catch (error: BackupFormatException) {

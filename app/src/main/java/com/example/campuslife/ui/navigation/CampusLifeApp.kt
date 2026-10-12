@@ -1,5 +1,21 @@
 package com.example.campuslife.ui.navigation
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
+import com.example.campuslife.ui.theme.BackdropScene
+import com.example.campuslife.ui.theme.ClaudeBackdrop
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
@@ -29,6 +45,9 @@ import com.example.campuslife.data.card.CardSeries
 import com.example.campuslife.data.card.MAX_COPIES_PER_CARD
 import com.example.campuslife.data.checkin.CheckInPhase
 import com.example.campuslife.data.plan.DailyPlan
+import com.example.campuslife.data.plan.learningDurationMillis
+import com.example.campuslife.data.plan.learningPhase
+import com.example.campuslife.data.plan.TaskLearningPhase
 import com.example.campuslife.data.plan.formatPlanDateLabel
 import com.example.campuslife.data.reminder.ReminderBootstrap
 import com.example.campuslife.ui.card.CardController
@@ -47,7 +66,6 @@ import com.example.campuslife.ui.journal.JournalPreviewData
 import com.example.campuslife.ui.journal.JournalScreen
 import com.example.campuslife.ui.journal.rememberJournalController
 import com.example.campuslife.ui.plan.DailyPlanController
-import com.example.campuslife.ui.plan.DailyPlanArchiveScreen
 import com.example.campuslife.ui.plan.rememberDailyPlanController
 import com.example.campuslife.ui.reminder.rememberReminderStatus
 import com.example.campuslife.ui.stats.StatsController
@@ -80,7 +98,7 @@ fun CampusLifeApp(
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(MainTab.Plan) }
     // 换日时钟提到最外层：打卡与每日计划共用同一把「今天」，统计页也以它为基准。
-    // 昨天任务全勾但没点结束打卡的，到点自动落定为已打卡（见 completedCheckInDays）。
+    // 昨天任务全完成但没点结束打卡的，到点自动落定为已打卡（见 completedCheckInDays）。
     val todayEpochDay = if (LocalInspectionMode.current) {
         PreviewEpochDay
     } else {
@@ -132,43 +150,86 @@ fun CampusLifeApp(
         }
     }
 
+    // 再点一次当前 Tab 时让导航栏上的小卵包原地跳一下；纯装饰，不参与任何逻辑。
+    var mascotPokes by remember { mutableIntStateOf(0) }
+
     // 开卡动效要盖住整个界面（含底部导航），所以 Scaffold 外面包一层 Box。
     Box(modifier = modifier.fillMaxSize()) {
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            Column {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ) {
-                    MainTab.entries.forEach { tab ->
-                        val isSelected = tab == selectedTab
-                        NavigationBarItem(
-                            selected = isSelected,
-                            onClick = { selectedTab = tab },
-                            icon = {
-                                Icon(
-                                    imageVector = if (isSelected) tab.selectedIcon else tab.unselectedIcon,
-                                    contentDescription = tab.label,
-                                )
-                            },
-                            label = { Text(tab.label) },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                selectedTextColor = MaterialTheme.colorScheme.primary,
-                                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            ),
-                        )
+            Box {
+                Column {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    NavigationBar(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ) {
+                        MainTab.entries.forEach { tab ->
+                            val isSelected = tab == selectedTab
+                            NavigationBarItem(
+                                selected = isSelected,
+                                onClick = {
+                                    if (tab == selectedTab) mascotPokes++
+                                    selectedTab = tab
+                                },
+                                icon = {
+                                    BouncyTabIcon(selected = isSelected) {
+                                        Icon(
+                                            imageVector = if (isSelected) tab.selectedIcon else tab.unselectedIcon,
+                                            contentDescription = tab.label,
+                                        )
+                                    }
+                                },
+                                label = { Text(tab.label) },
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                ),
+                            )
+                        }
                     }
                 }
+                // 站在导航栏上沿、当前 Tab 正上方的像素小卵包。
+                TabMascot(
+                    selectedIndex = selectedTab.ordinal,
+                    tabCount = MainTab.entries.size,
+                    pokeCount = mascotPokes,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .layout { measurable, constraints ->
+                            // 画在导航栏上方：不占导航栏的高度，整块往上挪出自己的高度。
+                            val placeable = measurable.measure(constraints.copy(minHeight = 0))
+                            layout(placeable.width, 0) { placeable.place(0, -placeable.height) }
+                        },
+                )
             }
         },
     ) { innerPadding ->
         val contentModifier = Modifier.padding(innerPadding)
-        when (selectedTab) {
+        // 页面底下垫一层像素背景插画；页面本身是透明底，切 Tab 时背景淡入淡出。
+        Box(Modifier.fillMaxSize()) {
+        ClaudeBackdrop(
+            scene = selectedTab.backdrop,
+            modifier = contentModifier.fillMaxSize(),
+        )
+        AnimatedContent(
+            targetState = selectedTab,
+            transitionSpec = {
+                // 往右边的 Tab 走，新页面从右侧轻轻滑进来；往左走则反过来。
+                val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
+                (fadeIn(tween(durationMillis = 220, delayMillis = 70)) +
+                    slideInHorizontally(tween(durationMillis = 300, easing = FastOutSlowInEasing)) { width ->
+                        direction * width / 12
+                    }) togetherWith
+                    (fadeOut(tween(durationMillis = 140)) +
+                        slideOutHorizontally(tween(durationMillis = 220)) { width -> -direction * width / 16 })
+            },
+            label = "tabContent",
+        ) { tab ->
+        when (tab) {
             MainTab.Plan -> TodayRoute(
                 checkIn = checkIn,
                 plan = plan,
@@ -196,9 +257,8 @@ fun CampusLifeApp(
             MainTab.Stats -> StatsScreen(
                 state = stats.state,
                 modifier = contentModifier,
-                onSelectRange = stats.onSelectRange,
                 onSelectDay = stats.onSelectDay,
-                onDismissDayDetail = stats.onDismissDayDetail,
+                onShowToday = stats.onShowToday,
                 onUseRestCard = checkIn.onUseRestCard,
                 onExchangeCards = card.onExchange,
                 showExchangeResult = card.justExchanged,
@@ -207,6 +267,8 @@ fun CampusLifeApp(
                 showRestCardReveal = checkIn.shouldRevealRestCard,
                 onDismissRestCardReveal = checkIn.onDismissRestCardReveal,
             )
+        }
+        }
         }
         }
 
@@ -219,6 +281,43 @@ fun CampusLifeApp(
                 onDismiss = card.onDismissReveal,
             )
         }
+    }
+}
+
+/** 每个 Tab 底下垫哪一幅像素背景。 */
+private val MainTab.backdrop: BackdropScene
+    get() = when (this) {
+        MainTab.Plan -> BackdropScene.Plan
+        MainTab.Journal -> BackdropScene.Journal
+        MainTab.Study -> BackdropScene.Study
+        MainTab.Stats -> BackdropScene.Stats
+    }
+
+/** 被选中的那一刻图标「啵」地弹一下；首次出现不弹。 */
+@Composable
+private fun BouncyTabIcon(
+    selected: Boolean,
+    content: @Composable () -> Unit,
+) {
+    val pop = remember { Animatable(1f) }
+    var appeared by remember { mutableStateOf(false) }
+    LaunchedEffect(selected) {
+        if (!appeared) {
+            appeared = true
+            return@LaunchedEffect
+        }
+        if (selected) {
+            pop.snapTo(0.72f)
+            pop.animateTo(1f, spring(dampingRatio = 0.32f, stiffness = 520f))
+        }
+    }
+    Box(
+        modifier = Modifier.graphicsLayer {
+            scaleX = pop.value
+            scaleY = pop.value
+        },
+    ) {
+        content()
     }
 }
 
@@ -260,7 +359,9 @@ private fun rememberAppDailyPlanController(
             history = plans.sortedByDescending { it.epochDay },
             plansForReminders = plans,
             isTodayLocked = isTodayLocked,
-            onToggleTask = {},
+            onToggleTaskTimer = {},
+            onFinishTask = {},
+            nowEpochMillis = StatsPreviewData.nowEpochMillis,
             onAddTask = { _, _, _ -> },
             onUpdateTask = { _, _, _, _ -> },
             onDeleteTask = {},
@@ -305,7 +406,6 @@ private fun rememberAppStudyController(): StudyController {
         return StudyController(
             state = StudyPreviewData.default,
             allDocuments = StudyPreviewData.default.documents,
-            checkedTasksByDocument = StudyPreviewData.checkedTasksByDocument,
             onSelectCategory = {},
             onSearchQueryChange = {},
             onImportFiles = {},
@@ -314,7 +414,8 @@ private fun rememberAppStudyController(): StudyController {
             onDeleteDocument = {},
             onSetDocumentCategory = { _, _ -> },
             onSaveReading = { _, _, _ -> },
-            onToggleTask = { _, _, _ -> },
+            onSaveVocabularyMask = { _, _ -> },
+            onSaveTaskCheckboxState = { _, _ -> },
         )
     }
     return rememberStudyController()
@@ -333,9 +434,8 @@ private fun rememberAppStatsController(
     if (LocalInspectionMode.current) {
         return StatsController(
             state = StatsPreviewData.withCards,
-            onSelectRange = {},
             onSelectDay = {},
-            onDismissDayDetail = {},
+            onShowToday = {},
             onUseRestCard = {},
         )
     }
@@ -343,6 +443,7 @@ private fun rememberAppStatsController(
         records = checkIn.records,
         todayEpochDay = checkIn.todayEpochDay,
         plans = plan.history,
+        nowEpochMillis = plan.nowEpochMillis,
         onUseRestCard = checkIn.onUseRestCard,
         ownedCards = card.collection,
         bonusRestCards = (checkIn.bonusRestCards.toLong() + card.exchangeRestCards)
@@ -434,7 +535,6 @@ private fun StudyRoute(
             } else {
                 "已读 ${(readerProgress * 100).toInt().coerceIn(1, 100)}%"
             },
-            checkedTaskIndexes = study.checkedTasksByDocument[openedDocument.id].orEmpty(),
         )
         StudyReaderScreen(
             state = readerState,
@@ -447,8 +547,11 @@ private fun StudyRoute(
                 readerScrollY = scrollY
                 readerProgress = progress
             },
-            onTaskToggle = { index, checked ->
-                study.onToggleTask(openedDocument.id, index, checked)
+            onVocabularyTableMaskChange = { mask ->
+                study.onSaveVocabularyMask(openedDocument.id, mask)
+            },
+            onTaskCheckboxStateChange = { state ->
+                study.onSaveTaskCheckboxState(openedDocument.id, state)
             },
         )
     }
@@ -464,7 +567,6 @@ private fun TodayRoute(
     onGachaClick: (CardSeries) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var showPlanArchive by rememberSaveable { mutableStateOf(false) }
     var showCloudBackup by rememberSaveable { mutableStateOf(false) }
 
     val cloudBackup = if (LocalInspectionMode.current) {
@@ -480,15 +582,6 @@ private fun TodayRoute(
         )
     }
 
-    if (showPlanArchive) {
-        DailyPlanArchiveScreen(
-            plans = plan.history,
-            modifier = modifier,
-            onBackClick = { showPlanArchive = false },
-        )
-        return
-    }
-
     val completedTitles = plan.today.tasks.filter { it.isCompleted }.map { it.title }.toSet()
     val priorityByTitle = TodayPreviewData.default.priorities.associateBy { it.title }
     val todayPriorities = plan.today.orderedTasks.map { task ->
@@ -500,10 +593,13 @@ private fun TodayRoute(
             category = preview?.category ?: TodayCategory.Personal,
             status = when {
                 task.isCompleted -> TodayItemStatus.Completed
-                else -> preview?.status ?: TodayItemStatus.NotStarted
+                task.learningPhase == TaskLearningPhase.Running -> TodayItemStatus.InProgress
+                else -> TodayItemStatus.NotStarted
             },
             expectedStartMinute = task.expectedStartMinute,
             manualOrder = task.manualOrder,
+            learningPhase = task.learningPhase,
+            learningDurationMillis = task.learningDurationMillis(plan.today.epochDay, plan.nowEpochMillis),
         )
     }
     val tomorrowPriorities = plan.tomorrow.orderedTasks.map { task ->
@@ -568,7 +664,8 @@ private fun TodayRoute(
         onToggleTheme = onToggleTheme,
         gachaState = gacha,
         onGachaClick = onGachaClick,
-        onTaskToggle = plan.onToggleTask,
+        onTaskToggleTimer = plan.onToggleTaskTimer,
+        onTaskFinish = plan.onFinishTask,
         onTaskAdd = plan.onAddTask,
         onTaskUpdate = plan.onUpdateTask,
         onTaskDelete = plan.onDeleteTask,
@@ -581,7 +678,6 @@ private fun TodayRoute(
         onUseAutomaticTomorrowTaskOrder = plan.onUseAutomaticTomorrowTaskOrder,
         onCheckInStart = checkIn.onStart,
         onCheckInFinish = checkIn.onFinish,
-        onOpenPlanArchive = { showPlanArchive = true },
         onOpenDataBackup = { showCloudBackup = true },
         // 只有真的排了预期开始时间才值得打断用户去要通知权限，
         // 而且只在还没授权时才请求：已经拒绝过的用户再弹一次也不会有对话框，

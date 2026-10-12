@@ -18,7 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.example.campuslife.ui.components.ClaudeTextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -341,7 +341,7 @@ internal fun ReminderStatusRow(
                 )
             }
             if (actionLabel != null && action != null) {
-                TextButton(onClick = action) {
+                ClaudeTextButton(onClick = action) {
                     Text(actionLabel, style = MaterialTheme.typography.labelLarge)
                 }
             }

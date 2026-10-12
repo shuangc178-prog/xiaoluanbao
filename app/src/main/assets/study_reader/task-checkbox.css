@@ -1,0 +1,67 @@
+/* Typora 自定义任务框在小卵包阅读器里的只读快照交互层。 */
+
+/* “完成”首列：隐藏 Markdown 标记文字，用主题色方框代替。 */
+#write table td.xlb-task-cell {
+  position: relative;
+  min-width: 34px;
+  text-align: center;
+  cursor: pointer;
+  font-size: 0;
+  color: transparent;
+}
+
+#write table td.xlb-task-cell::before {
+  content: "";
+  display: inline-block;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--claude-border, rgba(20, 20, 19, 0.12));
+  border-radius: 4px;
+  background-color: var(--claude-panel, #ffffff);
+  vertical-align: middle;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+#write table td.xlb-task-cell[aria-checked="true"]::before {
+  border-color: var(--claude-accent, #c6613f);
+  background-color: var(--claude-accent, #c6613f);
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round' d='M4 8.4l2.8 2.8L12 5.6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 12px 12px;
+}
+
+#write table td.xlb-task-cell:focus-visible {
+  outline: 2px solid var(--claude-accent, #c6613f);
+  outline-offset: -2px;
+}
+
+/* 与 Typora 表格扩展一致：完成后划掉同一行除任务格外的正文。 */
+#write table tr.xlb-task-done > td:not(.xlb-task-cell),
+#write table tr.xlb-task-done > td:not(.xlb-task-cell) * {
+  text-decoration: line-through !important;
+  opacity: 0.62;
+}
+
+#write table tr.xlb-task-done > td {
+  background-color: var(--claude-subtle, rgba(20, 20, 19, 0.035));
+}
+
+/* “插入 → 打卡框”生成的独立任务列表也可点；勾选后划掉本条文字。 */
+#write li.xlb-task-list-item > input.xlb-task-list-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  pointer-events: auto;
+  accent-color: var(--claude-accent, #c6613f);
+}
+
+#write li.xlb-task-list-item.xlb-task-done {
+  text-decoration: line-through;
+  background-color: var(--claude-accent-soft, rgba(198, 97, 63, 0.10));
+}
+
+#write li.xlb-task-list-item.xlb-task-done > input.xlb-task-list-checkbox {
+  text-decoration: none;
+}

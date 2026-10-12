@@ -14,7 +14,7 @@ plugins {
  * 所以要离线备份 keystore 文件 + 这里的四行属性。
  *
  * 只有 release 需要它，debug 仍走 Android 自动生成的调试密钥，因此缺文件不在这里报错，
- * 否则会让日常 debug 编译也跑不起来——真正的拦截放在下面 release 块的 check 里。
+ * 否则会让日常 debug 编译也跑不起来——真正的拦截放在 release 构建任务执行时。
  */
 val keystorePropertiesFile = rootProject.file("keystore.properties")
 val keystoreProperties = Properties().apply {
@@ -23,7 +23,7 @@ val keystoreProperties = Properties().apply {
     }
 }
 
-/** 用 keystore.properties 里的四项建 signingConfig；缺文件时不去碰它（release 块里会拦）。 */
+/** 用 keystore.properties 里的四项建 signingConfig；缺文件时由 release 构建任务拦截。 */
 fun com.android.build.api.dsl.ApplicationExtension.configureReleaseSigning() {
     if (!keystorePropertiesFile.exists()) return
 
@@ -75,14 +75,10 @@ android {
                 "proguard-rules.pro",
             )
 
-            // 就是这一步把 app-release-unsigned.apk 变成 app-release.apk。
-            // 缺 keystore.properties 时明确失败，不静默产出未签名包——
-            // 未签名包装不上手机、也传不上任何商店，静默通过只会让问题拖到发布那天。
-            check(keystorePropertiesFile.exists()) {
-                "缺少 keystore.properties，release 无法签名。" +
-                    "参考项目根目录的说明生成 keystore，或用 ./gradlew assembleDebug 先跑 debug。"
+            // 有本机签名配置时产出已签名 release；公开源码中的 debug 构建不依赖该文件。
+            if (keystorePropertiesFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
             }
-            signingConfig = signingConfigs.getByName("release")
         }
     }
 
@@ -93,6 +89,22 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+}
+
+// 拦截只发生在执行 release 构建时，避免下载公开源码后连 Gradle Sync 和 debug 都失败。
+// 仍然禁止在缺少密钥时静默产出无法安装的未签名 release。
+if (!keystorePropertiesFile.exists()) {
+    val requireReleaseSigning = tasks.register("requireReleaseSigning") {
+        doLast {
+            throw GradleException(
+                "缺少 keystore.properties，release 无法签名。" +
+                    "参考 README.md 配置自己的签名密钥，或用 ./gradlew :app:assembleDebug 构建调试版。",
+            )
+        }
+    }
+    tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+        dependsOn(requireReleaseSigning)
     }
 }
 

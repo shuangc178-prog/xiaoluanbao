@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
@@ -32,7 +31,7 @@ fun TodayScreen(
     state: TodayUiState,
     modifier: Modifier = Modifier,
     checkInState: CheckInUiState = CheckInUiState(),
-    /** 当天是否已结束打卡：为 true 时任务勾选锁住，不能再取消。 */
+    /** 当天是否已结束打卡：为 true 时任务整体只读。 */
     isCheckInLocked: Boolean = false,
     completedTaskTitles: Set<String> = emptySet(),
     tomorrowPriorities: List<TodayPriorityUiModel> = emptyList(),
@@ -43,7 +42,8 @@ fun TodayScreen(
     /** 抽卡入口（打卡按钮下方那块）的状态与点击。 */
     gachaState: GachaEntryUiState = GachaEntryUiState(),
     onGachaClick: (CardSeries) -> Unit = {},
-    onTaskToggle: (String) -> Unit = {},
+    onTaskToggleTimer: (String) -> Unit = {},
+    onTaskFinish: (String) -> Unit = {},
     onTaskAdd: (title: String, supportingText: String, expectedStartMinute: Int?) -> Unit = { _, _, _ -> },
     onTaskUpdate: (
         originalTitle: String,
@@ -66,8 +66,6 @@ fun TodayScreen(
     onUseAutomaticTomorrowTaskOrder: () -> Unit = {},
     onCheckInStart: () -> Unit = {},
     onCheckInFinish: () -> Unit = {},
-    /** 打开「每日计划存档」（首页头部的入口）。 */
-    onOpenPlanArchive: () -> Unit = {},
     /** 打开坚果云备份与恢复。 */
     onOpenDataBackup: () -> Unit = {},
     /** 保存了带预期开始时间的任务后回调，用来在真实使用时刻申请通知权限。 */
@@ -187,7 +185,6 @@ fun TodayScreen(
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
             .windowInsetsPadding(
                 WindowInsets.safeDrawing.only(
                     WindowInsetsSides.Horizontal + WindowInsetsSides.Top,
@@ -220,7 +217,6 @@ fun TodayScreen(
                             CheckInPhase.Finished -> Unit
                         }
                     },
-                    onOpenPlanArchive = onOpenPlanArchive,
                     onOpenDataBackup = onOpenDataBackup,
                 )
             }
@@ -236,11 +232,14 @@ fun TodayScreen(
                         showTaskEditor = editingPriority != null
                     },
                     onPriorityToggle = { id ->
-                        // 已打卡时不再交出勾选动作：控制器那边同样会拦，这里只是让「点了没反应」
+                        // 已打卡时不再交出计时动作：控制器那边同样会拦，这里只是让「点了没反应」
                         // 与界面上的禁用态一致，不会出现点了先变再弹回来的闪烁。
                         if (!isCheckInLocked) {
-                            priorities.firstOrNull { it.id == id }?.let { onTaskToggle(it.title) }
+                            priorities.firstOrNull { it.id == id }?.let { onTaskToggleTimer(it.title) }
                         }
+                    },
+                    onPriorityFinish = { id ->
+                        if (!isCheckInLocked) priorities.firstOrNull { it.id == id }?.let { onTaskFinish(it.title) }
                     },
                     onUseAutomaticOrder = onUseAutomaticTaskOrder,
                     onAddPriorityClick = {
@@ -379,7 +378,7 @@ fun TodayScreenCheckInFinishedPreview() {
                 startLabel = "07:20",
                 endLabel = "21:05",
             ),
-            // 已结束打卡：勾选锁住，复选框应该是禁用态，页头状态字多一段「已打卡」。
+            // 已结束打卡：任务锁住，计时按钮应该是禁用态，页头状态字多一段「已打卡」。
             isCheckInLocked = true,
             completedTaskTitles = TodayPreviewData.populatedCompletedTitles,
         )

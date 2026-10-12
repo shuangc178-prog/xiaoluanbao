@@ -32,14 +32,8 @@ data class ClaudeAccents(
     val amber: Color,
     val amberSoft: Color,
     val danger: Color,
-    // 文档阅读器要跟 Typora 的 Claude 主题逐条对齐，以下角色 Material 覆盖不到。
-    val mark: Color,
-    val codeBg: Color,
-    val codeText: Color,
-    val codeInlineBg: Color,
-    val codeInlineText: Color,
-    val rowHover: Color,
-    val dangerSoft: Color,
+    /** 背景插画按明暗取不同的图。 */
+    val isDark: Boolean,
 )
 
 private val LightAccents = ClaudeAccents(
@@ -59,13 +53,7 @@ private val LightAccents = ClaudeAccents(
     amber = ClaudeAmber,
     amberSoft = ClaudeAmberSoft,
     danger = ClaudeDanger,
-    mark = ClaudeMark,
-    codeBg = ClaudeSubtle,
-    codeText = ClaudeCodeText,
-    codeInlineBg = ClaudeSubtle,
-    codeInlineText = ClaudeAccentHover,
-    rowHover = ClaudeRowHover,
-    dangerSoft = ClaudeDangerSoft,
+    isDark = false,
 )
 
 private val DarkAccents = ClaudeAccents(
@@ -85,13 +73,7 @@ private val DarkAccents = ClaudeAccents(
     amber = ClaudeDarkAmber,
     amberSoft = ClaudeDarkAmberSoft,
     danger = ClaudeDarkDanger,
-    mark = ClaudeDarkMark,
-    codeBg = ClaudeDarkCodeBg,
-    codeText = ClaudeDarkCodeText,
-    codeInlineBg = ClaudeDarkCodeInlineBg,
-    codeInlineText = ClaudeDarkCodeInlineText,
-    rowHover = ClaudeDarkRowHover,
-    dangerSoft = ClaudeDarkDangerSoft,
+    isDark = true,
 )
 
 internal val LocalClaudeAccents = staticCompositionLocalOf { LightAccents }

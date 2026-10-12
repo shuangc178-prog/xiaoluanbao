@@ -5,7 +5,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.example.campuslife.ui.components.ClaudeTextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -50,7 +50,7 @@ internal fun CardViewer(
                     style = MaterialTheme.typography.labelMedium,
                 )
             }
-            TextButton(onClick = onDismiss) { Text("知道了") }
+            ClaudeTextButton(onClick = onDismiss) { Text("知道了") }
         }
     }
 }

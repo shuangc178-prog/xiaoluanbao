@@ -9,7 +9,6 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import java.io.File
 import java.util.Base64
 
 private val Context.studyDataStore: DataStore<Preferences> by preferencesDataStore(name = "study")
@@ -61,6 +60,47 @@ class StudyStore(private val context: Context) {
         }
     }
 
+    /** 背单词遮挡状态变化时立即落盘，退出笔记后再次打开仍保持用户翻开的单元格。 */
+    suspend fun updateVocabularyMask(id: String, mask: String?) {
+        context.studyDataStore.edit { preferences ->
+            preferences[DOCUMENTS_KEY] = preferences[DOCUMENTS_KEY]
+                .orEmpty()
+                .map { encoded ->
+                    val document = decodeStudyDocument(encoded)
+                    if (document?.id == id) {
+                        encodeStudyDocument(document.copy(vocabularyMask = mask))
+                    } else {
+                        encoded
+                    }
+                }
+                .toSet()
+        }
+    }
+
+    /**
+     * 阅读器里勾选复选框后立即落盘。资料的 Markdown 快照保持只读，勾选只存在这里；
+     * 资料重新导入后由 [TaskCheckboxState] 逐条比对文字哈希决定哪些勾选还能用。
+     */
+    suspend fun updateTaskCheckboxState(id: String, state: String?) {
+        // 页面状态先走统一编解码器，避免 `|` 等资料索引分隔符混进记录并破坏整份资料。
+        val normalizedState = state
+            ?.let(::decodeTaskCheckboxState)
+            ?.let(::encodeTaskCheckboxState)
+        context.studyDataStore.edit { preferences ->
+            preferences[DOCUMENTS_KEY] = preferences[DOCUMENTS_KEY]
+                .orEmpty()
+                .map { encoded ->
+                    val document = decodeStudyDocument(encoded)
+                    if (document?.id == id) {
+                        encodeStudyDocument(document.copy(taskCheckboxState = normalizedState))
+                    } else {
+                        encoded
+                    }
+                }
+                .toSet()
+        }
+    }
+
     suspend fun updateCategory(id: String, category: StudyCategory) {
         context.studyDataStore.edit { preferences ->
             preferences[DOCUMENTS_KEY] = preferences[DOCUMENTS_KEY]
@@ -87,68 +127,6 @@ class StudyStore(private val context: Context) {
     }
 
     suspend fun snapshot(): List<StudyDocument> = documents.first()
-
-    /** 任务勾选覆盖层：按资料 id 索引，正文里的 `[x]` 不在这里重复记录。 */
-    suspend fun loadTaskStates(): Map<String, StudyTaskState> = context.studyDataStore.data
-        .map { preferences -> preferences[TASK_STATES_KEY].orEmpty().mapNotNull(::decodeStudyTaskState) }
-        .first()
-        .associateBy { it.documentId }
-
-    /** 整包备份用：覆盖层原始记录，顺序固定便于往返比对。 */
-    suspend fun taskStateSnapshot(): List<StudyTaskState> = context.studyDataStore.data
-        .map { preferences ->
-            preferences[TASK_STATES_KEY].orEmpty()
-                .mapNotNull(::decodeStudyTaskState)
-                .sortedBy { it.documentId }
-        }
-        .first()
-
-    suspend fun replaceTaskStates(states: List<StudyTaskState>) {
-        context.studyDataStore.edit { preferences ->
-            preferences[TASK_STATES_KEY] = states.map(::encodeStudyTaskState).toSet()
-        }
-    }
-
-    /**
-     * 任务列表的最终勾选状态 = 正文里已勾上的项 ⊕ 覆盖层里翻转过的项。
-     *
-     * 这里按 [document] 当前的指纹过滤一次覆盖层：重新导入会换掉内容哈希，旧勾选整条作废，
-     * 不会错位到新正文的行上。
-     */
-    suspend fun effectiveCheckedTaskIndexes(document: StudyDocument): Set<Int> {
-        val stored = taskStateSnapshot()
-            .firstOrNull { it.documentId == document.id }
-            ?.takeIf { it.sourceFingerprint == studyTaskStateFingerprint(document) }
-            ?.checkedIndexes
-            .orEmpty()
-        val source = runCatching {
-            File(File(File(context.filesDir, IMPORTS_DIRECTORY_NAME), document.snapshotId), document.relativePath)
-                .readText(Charsets.UTF_8)
-        }.getOrDefault("")
-        return effectiveCheckedTaskIndexes(source, stored)
-    }
-
-    suspend fun setTaskChecked(
-        document: StudyDocument,
-        index: Int,
-        checked: Boolean,
-        knownStates: Map<String, StudyTaskState>,
-    ) {
-        if (index < 0) return
-        val fingerprint = studyTaskStateFingerprint(document)
-        val stored = knownStates[document.id]
-            ?.takeIf { it.sourceFingerprint == fingerprint }
-            ?: StudyTaskState(documentId = document.id, sourceFingerprint = fingerprint)
-        val next = stored.toggled(index, checked)
-        context.studyDataStore.edit { preferences ->
-            preferences[TASK_STATES_KEY] = preferences[TASK_STATES_KEY]
-                .orEmpty()
-                .filterNot { decodeStudyTaskState(it)?.documentId == document.id }
-                .toSet()
-                .plus(encodeStudyTaskState(next))
-        }
-    }
-
     suspend fun replaceAll(documents: List<StudyDocument>) {
         context.studyDataStore.edit { preferences ->
             preferences[DOCUMENTS_KEY] = documents.map(::encodeStudyDocument).toSet()
@@ -157,13 +135,15 @@ class StudyStore(private val context: Context) {
 }
 
 private val DOCUMENTS_KEY = stringSetPreferencesKey("documents")
-private val TASK_STATES_KEY = stringSetPreferencesKey("task_states")
-private const val IMPORTS_DIRECTORY_NAME = "study_imports"
 private const val FIELD_SEPARATOR = "|"
-private const val CODEC_VERSION = "2"
-private const val LEGACY_CODEC_VERSION = "1"
-private const val FIELD_COUNT = 17
-private const val LEGACY_FIELD_COUNT = 16
+private const val CODEC_VERSION = "4"
+private const val TASK_MARK_CODEC_VERSION = "3"
+private const val LEGACY_CODEC_VERSION = "2"
+private const val OLDEST_CODEC_VERSION = "1"
+private const val FIELD_COUNT = 19
+private const val TASK_MARK_FIELD_COUNT = 18
+private const val LEGACY_FIELD_COUNT = 17
+private const val OLDEST_FIELD_COUNT = 16
 
 internal fun encodeStudyDocument(document: StudyDocument): String = listOf(
     CODEC_VERSION,
@@ -183,6 +163,8 @@ internal fun encodeStudyDocument(document: StudyDocument): String = listOf(
     encodeText(document.folderLabel),
     encodeText(document.relativePath),
     document.category.name,
+    document.vocabularyMask.orEmpty(),
+    document.taskCheckboxState.orEmpty(),
 ).joinToString(FIELD_SEPARATOR)
 
 internal fun decodeStudyDocument(encoded: String): StudyDocument? {
@@ -190,7 +172,9 @@ internal fun decodeStudyDocument(encoded: String): StudyDocument? {
     val codecVersion = parts.firstOrNull()
     val hasExpectedShape = when (codecVersion) {
         CODEC_VERSION -> parts.size == FIELD_COUNT
+        TASK_MARK_CODEC_VERSION -> parts.size == TASK_MARK_FIELD_COUNT
         LEGACY_CODEC_VERSION -> parts.size == LEGACY_FIELD_COUNT
+        OLDEST_CODEC_VERSION -> parts.size == OLDEST_FIELD_COUNT
         else -> false
     }
     if (!hasExpectedShape) return null
@@ -212,10 +196,22 @@ internal fun decodeStudyDocument(encoded: String): StudyDocument? {
             sourceName = decodeText(parts[13]),
             folderLabel = decodeText(parts[14]),
             relativePath = decodeText(parts[15]),
-            category = if (codecVersion == CODEC_VERSION) {
-                StudyCategory.valueOf(parts[16])
-            } else {
+            category = if (codecVersion == OLDEST_CODEC_VERSION) {
                 StudyCategory.Notes
+            } else {
+                StudyCategory.valueOf(parts[16])
+            },
+            vocabularyMask = if (
+                codecVersion == CODEC_VERSION || codecVersion == TASK_MARK_CODEC_VERSION
+            ) {
+                parts[17].takeIf { it.isNotBlank() }
+            } else {
+                null
+            },
+            taskCheckboxState = if (codecVersion == CODEC_VERSION) {
+                parts[18].takeIf { it.isNotBlank() }
+            } else {
+                null
             },
         )
     }.getOrNull()

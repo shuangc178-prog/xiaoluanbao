@@ -1,5 +1,29 @@
 package com.example.campuslife.ui.today
 
+import androidx.compose.runtime.State
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import com.example.campuslife.ui.theme.keyLip
+import com.example.campuslife.ui.theme.pressBounce
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -13,13 +37,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import com.example.campuslife.ui.components.ClaudeButton
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.example.campuslife.ui.components.ClaudeTextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,7 +82,6 @@ internal fun TodayHeader(
     isCloudBackupConnected: Boolean,
     onToggleTheme: () -> Unit,
     onCheckInClick: () -> Unit,
-    onOpenPlanArchive: () -> Unit,
     onOpenDataBackup: () -> Unit,
     modifier: Modifier = Modifier,
     gachaState: GachaEntryUiState = GachaEntryUiState(),
@@ -93,10 +116,6 @@ internal fun TodayHeader(
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            PlanArchiveButton(
-                onClick = onOpenPlanArchive,
-                modifier = Modifier.padding(top = 10.dp),
-            )
             DataBackupButton(
                 onClick = onOpenDataBackup,
                 isConnected = isCloudBackupConnected,
@@ -126,7 +145,7 @@ internal fun TodayHeader(
             }
             val checkInHint = when {
                 checkInState.phase == CheckInPhase.Idle && !hasTasks -> "添加今天的任务后可打卡"
-                checkInState.phase == CheckInPhase.Started && !allTasksCompleted -> "勾完全部任务后可结束"
+                checkInState.phase == CheckInPhase.Started && !allTasksCompleted -> "完成全部任务后可结束"
                 else -> null
             }
             if (checkInHint != null) {
@@ -147,7 +166,7 @@ internal fun TodayHeader(
     }
 }
 
-/** 坚果云自动备份与恢复入口；与计划存档并列但使用独立语义，避免误以为是同一份存档。 */
+/** 坚果云自动备份与恢复入口；位于日期下方，历史计划统一在统计页查看。 */
 @Composable
 private fun DataBackupButton(
     onClick: () -> Unit,
@@ -155,9 +174,10 @@ private fun DataBackupButton(
     modifier: Modifier = Modifier,
 ) {
     val connectedColor = MaterialTheme.claude.green
+    val interactionSource = remember { MutableInteractionSource() }
     Surface(
         onClick = onClick,
-        modifier = modifier,
+        modifier = modifier.pressBounce(interactionSource, pressedScale = 0.94f),
         shape = RoundedCornerShape(12.dp),
         color = if (isConnected) connectedColor.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface,
         contentColor = if (isConnected) connectedColor else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -165,9 +185,15 @@ private fun DataBackupButton(
             1.dp,
             if (isConnected) connectedColor.copy(alpha = 0.7f) else MaterialTheme.colorScheme.outlineVariant,
         ),
+        interactionSource = interactionSource,
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            modifier = Modifier
+                .keyLip(
+                    interactionSource = interactionSource,
+                    color = if (isConnected) connectedColor.copy(alpha = 0.22f) else MaterialTheme.colorScheme.outlineVariant,
+                )
+                .padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(5.dp),
         ) {
@@ -187,42 +213,6 @@ private fun DataBackupButton(
 }
 
 /**
- * 每日计划存档入口：日期下方的小气泡。
- *
- * 用图标 + 文字的小圆角气泡，不占首屏多余高度；点进去按周回看每天的计划快照。
- */
-@Composable
-private fun PlanArchiveButton(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        onClick = onClick,
-        modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surface,
-        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
-        ) {
-            Icon(
-                imageVector = Icons.Filled.DateRange,
-                contentDescription = "每日计划存档",
-                modifier = Modifier.size(17.dp),
-            )
-            Text(
-                text = "每日计划存档",
-                style = MaterialTheme.typography.labelMedium,
-            )
-        }
-    }
-}
-
-/**
  * 主题切换气泡：明色主题挂天使，暗色主题挂恶魔。
  *
  * 做成只放图标的小圆角气泡，不占首屏多余高度；点一下就在明暗之间切换。
@@ -233,13 +223,39 @@ internal fun ThemeToggleButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    // 主题真的换过来之后，新图标从侧面翻进来，同时向四周迸出一圈像素星。首次出现不播。
+    val flip = remember { Animatable(0f) }
+    val burst = remember { Animatable(1f) }
+    var appeared by remember { mutableStateOf(false) }
+    LaunchedEffect(isDarkTheme) {
+        if (!appeared) {
+            appeared = true
+            return@LaunchedEffect
+        }
+        coroutineScope {
+            launch {
+                flip.snapTo(-90f)
+                flip.animateTo(0f, spring(dampingRatio = 0.45f, stiffness = 320f))
+            }
+            launch {
+                burst.snapTo(0f)
+                burst.animateTo(1f, tween(durationMillis = 650))
+            }
+        }
+    }
+    val burstColor = if (isDarkTheme) MaterialTheme.claude.amber else MaterialTheme.claude.accent
+
     Surface(
         onClick = onClick,
-        modifier = modifier,
+        modifier = modifier
+            .pixelBurst(progress = { burst.value }, color = burstColor)
+            .pressBounce(interactionSource, pressedScale = 0.86f),
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant,
         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        interactionSource = interactionSource,
     ) {
         Image(
             painter = painterResource(
@@ -247,18 +263,48 @@ internal fun ThemeToggleButton(
             ),
             contentDescription = if (isDarkTheme) "切换到亮色主题" else "切换到暗色主题",
             modifier = Modifier
+                .keyLip(interactionSource, MaterialTheme.colorScheme.outlineVariant)
                 .padding(5.dp)
-                .size(22.dp),
+                .size(22.dp)
+                .graphicsLayer {
+                    rotationY = flip.value
+                    cameraDistance = 12f * density
+                },
         )
     }
 }
+
+/**
+ * 以控件中心为原点向外迸出一圈像素小方块。[progress] 从 0 走到 1 播完一次；
+ * 停在 1（或 0 之前）时什么都不画。画在控件外沿，不受控件圆角裁切。
+ */
+private fun Modifier.pixelBurst(progress: () -> Float, color: Color): Modifier =
+    drawWithContent {
+        drawContent()
+        val p = progress()
+        if (p <= 0f || p >= 1f) return@drawWithContent
+        val eased = 1f - (1f - p) * (1f - p)
+        val start = size.minDimension / 2f
+        val reach = start + 22.dp.toPx() * eased
+        val square = 4.dp.toPx() * (1f - p * 0.6f)
+        for (i in 0 until 10) {
+            val angle = i / 10f * 2f * PI.toFloat() + 0.3f
+            val r = if (i % 2 == 0) reach else reach * 0.8f
+            val c = Offset(center.x + cos(angle) * r, center.y + sin(angle) * r)
+            drawRect(
+                color = color.copy(alpha = (1f - p) * color.alpha),
+                topLeft = Offset(c.x - square / 2f, c.y - square / 2f),
+                size = Size(square, square),
+            )
+        }
+    }
 
 /**
  * 打卡按钮，沿用原来的日历气泡：日历图标 + 一行文字，右侧跟累计天数。
  *
  * 三个状态：
  * - 无色：今天还没开始打卡；任务栏为空时不可开始（防止「没做任务也打卡」的错误统计）
- * - 红色：已开始，勾完全部任务后才能结束
+ * - 红色：已开始，完成全部任务后才能结束
  * - 绿色：今天已结束，不再可点
  */
 @Composable
@@ -295,18 +341,68 @@ internal fun CheckInButton(
         else -> "打卡"
     }
 
+    // 三态之间换色不再跳变，而是顺滑过渡；状态真的变了（开始 / 结束打卡）时整颗气泡弹一下，
+    // 再向四周迸一圈像素星。首次出现不播。
+    val animatedContainer by animateColorAsState(containerColor, label = "checkInContainer")
+    val animatedContent by animateColorAsState(contentColor, label = "checkInContent")
+    val animatedBorder by animateColorAsState(borderColor, label = "checkInBorder")
+    val interactionSource = remember { MutableInteractionSource() }
+    val pop = remember { Animatable(1f) }
+    val burst = remember { Animatable(1f) }
+    var appeared by remember { mutableStateOf(false) }
+    LaunchedEffect(phase) {
+        if (!appeared) {
+            appeared = true
+            return@LaunchedEffect
+        }
+        coroutineScope {
+            launch {
+                pop.snapTo(0.8f)
+                pop.animateTo(1f, spring(dampingRatio = 0.35f, stiffness = 480f))
+            }
+            launch {
+                burst.snapTo(0f)
+                burst.animateTo(1f, tween(durationMillis = 700))
+            }
+        }
+    }
+    // 任务全部完成、可以结束打卡时轻轻「呼吸」，提示现在可以点了。只在绘制层读值，不逐帧重组。
+    val breathe: State<Float>? = if (canFinish) {
+        rememberInfiniteTransition(label = "checkInBreathe").animateFloat(
+            initialValue = 1f,
+            targetValue = 1.06f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "checkInBreatheScale",
+        )
+    } else {
+        null
+    }
+
     Surface(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier,
+        modifier = modifier
+            .pixelBurst(progress = { burst.value }, color = contentColor)
+            .graphicsLayer {
+                val s = pop.value * (breathe?.value ?: 1f)
+                scaleX = s
+                scaleY = s
+            }
+            .pressBounce(interactionSource, pressedScale = 0.92f),
         shape = RoundedCornerShape(12.dp),
-        color = containerColor,
-        contentColor = contentColor,
-        border = BorderStroke(1.dp, borderColor),
+        color = animatedContainer,
+        contentColor = animatedContent,
+        border = BorderStroke(1.dp, animatedBorder),
         shadowElevation = if (canFinish) 2.dp else 0.dp,
+        interactionSource = interactionSource,
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            modifier = Modifier
+                .keyLip(interactionSource, animatedBorder)
+                .padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
@@ -366,7 +462,7 @@ internal fun CheckInDialog(
             }
         },
         confirmButton = {
-            Button(
+            ClaudeButton(
                 onClick = onConfirmCheckIn,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
@@ -377,7 +473,7 @@ internal fun CheckInDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            ClaudeTextButton(onClick = onDismiss) {
                 Text("稍后再说")
             }
         },

@@ -30,10 +30,10 @@ class StatsRestCardTest {
         kind = CheckInRecordKind.RestCard,
     )
 
-    private fun state(records: List<CheckInRecord>) = buildStatsUiState(
+    private fun state(records: List<CheckInRecord>, selected: Long = today) = buildStatsUiState(
         records = records,
         todayEpochDay = today,
-        range = StatsRange.Week,
+        selectedEpochDay = selected,
     )
 
     @Test
@@ -64,7 +64,7 @@ class StatsRestCardTest {
     fun restCardDayIsMarkedAndCountedButNotRewarded() {
         val records = (0 until 5).map { real(today - it) } + rest(today - 5)
         val state = state(records)
-        val filled = state.days.first { it.epochDay == today - 5 }
+        val filled = state(records, today - 5).day
         assertTrue(filled.isRestCardDay)
         // 补记的天进「已打卡」累计。
         assertEquals(6, state.completedDays)
@@ -77,13 +77,13 @@ class StatsRestCardTest {
         val records = (0 until 3).map { real(today - it) }
         val state = state(records)
 
-        val todayCell = state.days.first { it.epochDay == today }
+        val todayCell = state.day
         assertFalse("今天不该能用卡补", todayCell.canUseRestCard)
 
-        val checkedDay = state.days.first { it.epochDay == today - 1 }
+        val checkedDay = state(records, today - 1).day
         assertFalse("已经打过的卡不能再补", checkedDay.canUseRestCard)
 
-        val gapDay = state.days.first { it.epochDay == today - 4 }
+        val gapDay = state(records, today - 4).day
         assertTrue("过去没打卡的那天可以补", gapDay.canUseRestCard)
     }
 
@@ -91,7 +91,7 @@ class StatsRestCardTest {
     fun aDayAlreadyFilledByRestCardCannotBeFilledAgain() {
         val records = (0 until 3).map { real(today - it) } + rest(today - 4)
         val state = state(records)
-        val filled = state.days.first { it.epochDay == today - 4 }
+        val filled = state(records, today - 4).day
         assertTrue(filled.isRestCardDay)
         assertFalse("补过一次就不再提供入口", filled.canUseRestCard)
     }
@@ -106,10 +106,10 @@ class StatsRestCardTest {
         assertEquals(0, preview.restCards.available)
         assertEquals(1, preview.restCardGrants.size)
         assertTrue(preview.restCardGrants.single().isUsed)
-        // 进度条重新起算：预览里今天是「还没打卡」，因此从昨天往回数是 4 天。
-        assertEquals(4, preview.restCards.progressDays)
-        assertEquals(1, preview.restCards.daysToNext)
+        // 预览里今天尚未打卡，昨天起连续 5 天，因此下一张还需 5 天。
+        assertEquals(5, preview.restCards.progressDays)
+        assertEquals(5, preview.restCards.daysToNext)
         // 被补的那天在界面数据里带上「休息卡补记」标记。
-        assertTrue(preview.days.any { it.isRestCardDay })
+        assertTrue(preview.day.isRestCardDay)
     }
 }

@@ -19,13 +19,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.Button
+import com.example.campuslife.ui.components.ClaudeButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import com.example.campuslife.ui.components.ClaudeIconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.example.campuslife.ui.components.ClaudeTextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -117,7 +117,7 @@ internal fun ReminderOverlayCard(
                         )
                     }
                     Spacer(modifier = Modifier.weight(1f))
-                    IconButton(
+                    ClaudeIconButton(
                         onClick = onDismiss,
                         modifier = Modifier.size(30.dp),
                     ) {
@@ -174,7 +174,7 @@ internal fun ReminderOverlayCard(
                     }
                 }
 
-                Button(
+                ClaudeButton(
                     onClick = onDismiss,
                     modifier = Modifier
                         .padding(top = 12.dp, end = 6.dp)
@@ -183,7 +183,7 @@ internal fun ReminderOverlayCard(
                 ) {
                     Text(text = "知道了", style = MaterialTheme.typography.titleSmall)
                 }
-                TextButton(
+                ClaudeTextButton(
                     onClick = onOpenApp,
                     modifier = Modifier
                         .padding(end = 6.dp)

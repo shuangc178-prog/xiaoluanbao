@@ -1,5 +1,6 @@
 package com.example.campuslife.ui.study
 
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -32,23 +33,23 @@ import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.UploadFile
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import com.example.campuslife.ui.components.ClaudeButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilterChip
+import com.example.campuslife.ui.components.ClaudeTonalButton
+import com.example.campuslife.ui.components.ClaudeFilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import com.example.campuslife.ui.components.ClaudeIconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import com.example.campuslife.ui.components.ClaudeOutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.example.campuslife.ui.components.ClaudeTextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -119,20 +120,50 @@ fun StudyScreen(
     state.importResult?.let { result ->
         AlertDialog(
             onDismissRequest = onDismissImportResult,
-            title = { Text(if (result.hasImportedDocuments) "导入完成" else "没有导入资料") },
+            title = {
+                Text(
+                    when {
+                        result.requiresResourceFolder -> "还需要图片文件夹"
+                        result.hasImportedDocuments -> "导入完成"
+                        else -> "没有导入资料"
+                    },
+                )
+            },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (result.importedCount > 0) Text("已添加 ${result.importedCount} 份资料。")
+                    if (result.replacedCount > 0) Text("已补全 ${result.replacedCount} 份资料的配套图片。")
                     if (result.skippedDuplicates > 0) Text("已跳过 ${result.skippedDuplicates} 份内容相同的资料。")
+                    result.resourceFolderMessage?.let { message -> Text(message) }
                     result.errors.forEach { error ->
                         Text("• $error", color = MaterialTheme.colorScheme.error)
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = onDismissImportResult) {
-                    Text("知道了")
+                if (result.requiresResourceFolder) {
+                    ClaudeTextButton(
+                        onClick = {
+                            onDismissImportResult()
+                            onPickFolderClick()
+                        },
+                    ) {
+                        Text("选择资料文件夹")
+                    }
+                } else {
+                    ClaudeTextButton(onClick = onDismissImportResult) {
+                        Text("知道了")
+                    }
                 }
+            },
+            dismissButton = if (result.requiresResourceFolder) {
+                {
+                    ClaudeTextButton(onClick = onDismissImportResult) {
+                        Text("稍后")
+                    }
+                }
+            } else {
+                null
             },
             containerColor = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(14.dp),
@@ -179,10 +210,10 @@ fun StudyScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { documentForActions = null }) { Text("关闭") }
+                ClaudeTextButton(onClick = { documentForActions = null }) { Text("关闭") }
             },
             dismissButton = {
-                TextButton(
+                ClaudeTextButton(
                     onClick = {
                         documentForDelete = document
                         documentForActions = null
@@ -204,7 +235,7 @@ fun StudyScreen(
                 Text("删除后只会移除 App 内的离线副本和阅读进度，不会删除你最初选择的源文件。")
             },
             confirmButton = {
-                TextButton(
+                ClaudeTextButton(
                     onClick = {
                         onDeleteDocument(document.id)
                         documentForDelete = null
@@ -214,16 +245,17 @@ fun StudyScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { documentForDelete = null }) { Text("取消") }
+                ClaudeTextButton(onClick = { documentForDelete = null }) { Text("取消") }
             },
             containerColor = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(14.dp),
         )
     }
 
+    // 透明底：页面下面垫的是导航层统一画的像素背景。
     Surface(
         modifier = modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background,
+        color = Color.Transparent,
     ) {
         LazyColumn(
             modifier = Modifier
@@ -314,7 +346,7 @@ private fun StudyLibraryHeader(
             )
         }
 
-        FilledTonalButton(
+        ClaudeTonalButton(
             onClick = onAddDocumentClick,
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
         ) {
@@ -341,7 +373,7 @@ private fun ImportSourceDialog(
         title = { Text("添加到“${category.label}”") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedButton(
+                ClaudeOutlinedButton(
                     onClick = onPickFiles,
                     modifier = Modifier.fillMaxWidth(),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
@@ -351,13 +383,13 @@ private fun ImportSourceDialog(
                     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
                         Text("选择文件")
                         Text(
-                            "Markdown 或 ZIP",
+                            "Markdown 或 ZIP；无本地配图时可直接导入",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
-                OutlinedButton(
+                ClaudeOutlinedButton(
                     onClick = onPickFolder,
                     modifier = Modifier.fillMaxWidth(),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
@@ -367,7 +399,7 @@ private fun ImportSourceDialog(
                     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
                         Text("选择资料文件夹")
                         Text(
-                            "保留相对路径图片与附件",
+                            "同时导入 Markdown 与 assets 配图（推荐）",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -377,7 +409,7 @@ private fun ImportSourceDialog(
         },
         confirmButton = {},
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            ClaudeTextButton(onClick = onDismiss) { Text("取消") }
         },
         containerColor = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(14.dp),
@@ -395,7 +427,7 @@ private fun StudyCategorySelector(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         StudyCategory.entries.forEach { category ->
-            FilterChip(
+            ClaudeFilterChip(
                 selected = selectedCategory == category,
                 onClick = { onSelectCategory(category) },
                 label = {
@@ -430,7 +462,7 @@ private fun DocumentSearchField(
         },
         trailingIcon = if (query.isNotEmpty()) {
             {
-                IconButton(onClick = { onQueryChange("") }) {
+                ClaudeIconButton(onClick = { onQueryChange("") }) {
                     Icon(Icons.Outlined.Close, contentDescription = "清空搜索")
                 }
             }
@@ -565,7 +597,7 @@ private fun DocumentRow(
                 )
             }
         }
-        IconButton(onClick = onMoreClick) {
+        ClaudeIconButton(onClick = onMoreClick) {
             Icon(
                 imageVector = Icons.Outlined.MoreVert,
                 contentDescription = "更多文件操作",
@@ -639,7 +671,7 @@ private fun EmptyDocumentLibrary(
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
             )
-            Button(
+            ClaudeButton(
                 onClick = onAddDocumentClick,
                 modifier = Modifier.padding(top = 20.dp),
             ) {

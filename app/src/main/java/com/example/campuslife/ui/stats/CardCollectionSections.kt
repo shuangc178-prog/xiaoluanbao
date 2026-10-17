@@ -11,16 +11,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.KeyboardArrowDown
-import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import com.example.campuslife.ui.components.ClaudeButton
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -33,9 +29,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.example.campuslife.data.card.CardSeries
 import com.example.campuslife.data.card.GachaCard
@@ -44,19 +37,10 @@ import com.example.campuslife.ui.card.CardViewer
 import com.example.campuslife.ui.card.rarityAccent
 import com.example.campuslife.ui.theme.claude
 
-/**
- * 统计页的卡片收集折叠面板。
- *
- * 放在休息卡上面：两块都是奖励，收集进度是「还差什么」，
- * 休息卡那段最后一句指下面图表（点某一天用卡），顺序不打断它。
- *
- * 收起时只保留跨系列汇总，展开后再呈现每一弹的卡面与兑换操作。
- */
+/** 本日计划的卡册弹层内容：汇总、每一弹的卡面与兑换操作。 */
 @Composable
-internal fun CardCollectionFold(
+internal fun CardCollectionSection(
     collections: List<CardCollectionUiState>,
-    expanded: Boolean,
-    onExpandedChange: (Boolean) -> Unit,
     onExchange: (CardSeries) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -72,10 +56,6 @@ internal fun CardCollectionFold(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .semantics {
-                        stateDescription = if (expanded) "已展开" else "已折叠"
-                    }
-                    .clickable(role = Role.Button) { onExpandedChange(!expanded) }
                     .padding(18.dp),
             ) {
                 Row(
@@ -108,16 +88,6 @@ internal fun CardCollectionFold(
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
-                    Icon(
-                        imageVector = if (expanded) {
-                            Icons.Outlined.KeyboardArrowUp
-                        } else {
-                            Icons.Outlined.KeyboardArrowDown
-                        },
-                        contentDescription = if (expanded) "收起卡片收集" else "展开卡片收集",
-                        modifier = Modifier.padding(start = 6.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
                 LinearProgressIndicator(
                     progress = { summary.progress },
@@ -131,14 +101,12 @@ internal fun CardCollectionFold(
                 )
             }
 
-            if (expanded) {
-                collections.forEach { collection ->
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    CardCollectionSeriesContent(
-                        collection = collection,
-                        onExchange = onExchange,
-                    )
-                }
+            collections.forEach { collection ->
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                CardCollectionSeriesContent(
+                    collection = collection,
+                    onExchange = onExchange,
+                )
             }
         }
     }

@@ -21,12 +21,7 @@ import androidx.compose.ui.unit.dp
 import com.example.campuslife.data.checkin.REST_CARD_STREAK_DAYS
 import com.example.campuslife.ui.theme.claude
 
-/**
- * 统计页的「休息卡」分区：奖励从哪里来、现在有几张、还差几天、过去的卡去了哪。
- *
- * 这一块是统计页上唯一的**非统计**内容，但它必须放在这里——
- * 休息卡的使用入口是「点某一天」，而点某一天只发生在统计页的图表上。
- */
+/** 本日计划的休息卡弹层内容：库存、奖励进度与卡片去向。 */
 @Composable
 internal fun RestCardSection(
     state: StatsUiState,

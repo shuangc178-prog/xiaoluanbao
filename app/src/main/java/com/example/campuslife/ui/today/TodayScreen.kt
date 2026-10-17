@@ -73,6 +73,8 @@ fun TodayScreen(
     onPriorityClick: (String) -> Unit = {},
     onAddPriorityClick: () -> Unit = {},
     onCheckIn: () -> Unit = {},
+    /** 休息卡和卡册的紧凑入口，由路由传入同一份奖励数据。 */
+    rewardActions: @Composable (() -> Unit)? = null,
 ) {
     var showCheckInDialog by remember { mutableStateOf(false) }
     var lastPhase by remember { mutableStateOf(checkInState.phase) }
@@ -219,6 +221,9 @@ fun TodayScreen(
                     },
                     onOpenDataBackup = onOpenDataBackup,
                 )
+            }
+            if (rewardActions != null) {
+                item(key = "reward-actions") { rewardActions() }
             }
             item(key = "priorities") {
                 TodayPrioritiesSection(

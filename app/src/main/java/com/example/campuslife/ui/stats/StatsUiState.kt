@@ -129,12 +129,14 @@ data class StatsUiState(
     val restCards: RestCardUiState = RestCardUiState(),
     val collections: List<CardCollectionUiState> = emptyList(),
     val restCardGrants: List<RestCardGrantUiModel> = emptyList(),
+    /** 固定为今天及前六天，按日期升序；没有计划的日期仍保留零值。 */
+    val recentDays: List<StatsDayUiModel> = emptyList(),
 ) {
     val collection: CardCollectionUiState
         get() = collections.firstOrNull { it.series == CardSeries.Isekai } ?: CardCollectionUiState()
 }
 
-/** 仅展示所选一天。历史全量数据只用于连续打卡、累计学习时长与奖励库存。 */
+/** 所选日的明细与最近七天共用计时口径，历史选择不移动最近七天的窗口。 */
 fun buildStatsUiState(
     records: List<CheckInRecord>,
     todayEpochDay: Long,
@@ -150,36 +152,42 @@ fun buildStatsUiState(
     val grants = earnedRestCards(realDays)
     val usedDays = restDays.sorted()
     val selected = (selectedEpochDay ?: todayEpochDay).coerceAtMost(todayEpochDay)
-    val record = records.firstOrNull { it.epochDay == selected }
-    val plan = plans.firstOrNull { it.epochDay == selected }
-    val date = LocalDate.ofEpochDay(selected)
-    val day = StatsDayUiModel(
-        epochDay = selected,
-        dateLabel = formatPlanDateLabel(date),
-        isToday = selected == todayEpochDay,
-        isCheckedIn = selected in completedDays,
-        startMinute = record?.startMinuteOfDay,
-        endMinute = record?.endMinuteOfDay,
-        tasks = plan?.orderedTasks?.map { task ->
-            StatsTaskUiModel(
-                title = task.title,
-                supportingText = task.supportingText,
-                isCompleted = task.isCompleted,
-                learningDurationMillis = task.learningDurationMillis(selected, nowEpochMillis),
-                learningPhase = if (task.learningPhase == TaskLearningPhase.Running &&
-                    nowEpochMillis >= learningDayEndMillis(selected)) TaskLearningPhase.Paused
-                    else task.learningPhase,
-            )
-        }.orEmpty(),
-        isRestCardDay = selected in restDays,
-        canUseRestCard = selected < todayEpochDay && selected !in completedDays && selected !in restDays,
-    )
+    val recordsByDay = records.associateBy { it.epochDay }
+    val plansByDay = plans.associateBy { it.epochDay }
+    fun dayModel(epochDay: Long): StatsDayUiModel {
+        val record = recordsByDay[epochDay]
+        val plan = plansByDay[epochDay]
+        val date = LocalDate.ofEpochDay(epochDay)
+        return StatsDayUiModel(
+            epochDay = epochDay,
+            dateLabel = formatPlanDateLabel(date),
+            isToday = epochDay == todayEpochDay,
+            isCheckedIn = epochDay in completedDays,
+            startMinute = record?.startMinuteOfDay,
+            endMinute = record?.endMinuteOfDay,
+            tasks = plan?.orderedTasks?.map { task ->
+                StatsTaskUiModel(
+                    title = task.title,
+                    supportingText = task.supportingText,
+                    isCompleted = task.isCompleted,
+                    learningDurationMillis = task.learningDurationMillis(epochDay, nowEpochMillis),
+                    learningPhase = if (task.learningPhase == TaskLearningPhase.Running &&
+                        nowEpochMillis >= learningDayEndMillis(epochDay)) TaskLearningPhase.Paused
+                        else task.learningPhase,
+                )
+            }.orEmpty(),
+            isRestCardDay = epochDay in restDays,
+            canUseRestCard = epochDay < todayEpochDay && epochDay !in completedDays && epochDay !in restDays,
+        )
+    }
+    val recentDays = (todayEpochDay - 6..todayEpochDay).map(::dayModel)
     val allLearningMillis = plans.filter { it.epochDay <= todayEpochDay }.sumOf { history ->
         history.tasks.sumOf { it.learningDurationMillis(history.epochDay, nowEpochMillis) }
     }
     return StatsUiState(
         todayEpochDay = todayEpochDay,
-        day = day,
+        day = recentDays.firstOrNull { it.epochDay == selected } ?: dayModel(selected),
+        recentDays = recentDays,
         completedDays = completedDays.size,
         currentStreakDays = currentStreak(completedDays.toList(), todayEpochDay),
         longestStreakDays = longestStreak(completedDays.toList()),

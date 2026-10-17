@@ -31,8 +31,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.example.campuslife.data.card.CardSeries
-import com.example.campuslife.data.card.EXCHANGE_REWARD_REST_CARDS
 import com.example.campuslife.ui.theme.CampusLifeTheme
 
 @Composable
@@ -41,15 +39,9 @@ fun StatsScreen(
     modifier: Modifier = Modifier,
     onSelectDay: (Long) -> Unit = {},
     onShowToday: () -> Unit = {},
-    onUseRestCard: (Long) -> Unit = {},
-    onExchangeCards: (CardSeries) -> Unit = {},
-    showExchangeResult: Boolean = false,
-    onDismissExchangeResult: () -> Unit = {},
-    onDismissRestCardReveal: () -> Unit = {},
-    showRestCardReveal: Boolean = false,
 ) {
-    var isCardCollectionExpanded by rememberSaveable { mutableStateOf(false) }
     var showHistory by rememberSaveable { mutableStateOf(false) }
+    var showDayDetail by rememberSaveable { mutableStateOf(false) }
     // 透明底：页面下面垫的是导航层统一画的像素背景。
     Surface(modifier.fillMaxSize(), color = Color.Transparent) {
         LazyColumn(
@@ -73,19 +65,11 @@ fun StatsScreen(
                 }
             }
             item(key = "streak") { StreakCard(state) }
-            if (state.collections.isNotEmpty()) {
-                item(key = "card-collections") {
-                    CardCollectionFold(
-                        collections = state.collections,
-                        expanded = isCardCollectionExpanded,
-                        onExpandedChange = { isCardCollectionExpanded = it },
-                        onExchange = onExchangeCards,
-                    )
-                }
-            }
-            item(key = "rest-card") { RestCardSection(state) }
-            item(key = "daily-check-in") {
-                DayCheckInCard(state.day, state.restCards.available) { onUseRestCard(state.day.epochDay) }
+            item(key = "recent-learning-chart") {
+                RecentLearningChart(state.recentDays, state.day.epochDay, onSelectDay = {
+                    onSelectDay(it)
+                    showDayDetail = true
+                })
             }
             item(key = "learning-chart") { TaskLearningChart(state.day) }
         }
@@ -95,29 +79,23 @@ fun StatsScreen(
             onDismiss = { showHistory = false },
             onSelect = { onSelectDay(it); showHistory = false })
     }
-    if (showRestCardReveal) RestCardReveal(onDismiss = onDismissRestCardReveal)
-    if (showExchangeResult) {
-        CardExchangeResultDialog(
-            rewardRestCards = state.collections.firstOrNull()?.rewardRestCards ?: EXCHANGE_REWARD_REST_CARDS,
-            onDismiss = onDismissExchangeResult,
-        )
-    }
+    if (showDayDetail) LearningDayDetailSheet(state.day, onDismiss = { showDayDetail = false })
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun StatsHistoryPicker(
+internal fun StatsHistoryPicker(
     selectedEpochDay: Long,
-    todayEpochDay: Long,
+    latestEpochDay: Long,
     onDismiss: () -> Unit,
     onSelect: (Long) -> Unit,
 ) {
     // Material 日期选择器的时间戳是 UTC 日期，不能按本地时区再偏移一次。
     val picker = rememberDatePickerState(
-        initialSelectedDateMillis = selectedEpochDay * DAY_MILLIS,
+        initialSelectedDateMillis = selectedEpochDay.coerceAtMost(latestEpochDay) * DAY_MILLIS,
         selectableDates = object : SelectableDates {
             override fun isSelectableDate(utcTimeMillis: Long): Boolean =
-                Math.floorDiv(utcTimeMillis, DAY_MILLIS) <= todayEpochDay
+                Math.floorDiv(utcTimeMillis, DAY_MILLIS) <= latestEpochDay
         },
     )
     DatePickerDialog(

@@ -41,7 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.tooling.preview.Preview
-import com.example.campuslife.data.card.CardSeries
+import com.example.campuslife.data.card.EXCHANGE_REWARD_REST_CARDS
 import com.example.campuslife.data.card.MAX_COPIES_PER_CARD
 import com.example.campuslife.data.checkin.CheckInPhase
 import com.example.campuslife.data.plan.DailyPlan
@@ -52,7 +52,6 @@ import com.example.campuslife.data.plan.formatPlanDateLabel
 import com.example.campuslife.data.reminder.ReminderBootstrap
 import com.example.campuslife.ui.card.CardController
 import com.example.campuslife.ui.card.CardPreviewData
-import com.example.campuslife.ui.card.GachaEntryUiState
 import com.example.campuslife.ui.card.GachaReveal
 import com.example.campuslife.ui.card.rememberCardController
 import com.example.campuslife.ui.backup.CloudBackupDialog
@@ -71,6 +70,8 @@ import com.example.campuslife.ui.reminder.rememberReminderStatus
 import com.example.campuslife.ui.stats.StatsController
 import com.example.campuslife.ui.stats.StatsPreviewData
 import com.example.campuslife.ui.stats.StatsScreen
+import com.example.campuslife.ui.stats.RestCardReveal
+import com.example.campuslife.ui.stats.CardExchangeResultDialog
 import com.example.campuslife.ui.stats.rememberStatsController
 import com.example.campuslife.ui.study.StudyController
 import com.example.campuslife.ui.study.StudyPreviewData
@@ -84,6 +85,9 @@ import com.example.campuslife.ui.today.TodayItemStatus
 import com.example.campuslife.ui.today.TodayPreviewData
 import com.example.campuslife.ui.today.TodayPriorityUiModel
 import com.example.campuslife.ui.today.TodayScreen
+import com.example.campuslife.ui.today.TodayRewardButtons
+import com.example.campuslife.ui.today.TodayRewardPanel
+import com.example.campuslife.ui.today.TodayRewardSheet
 import com.example.campuslife.ui.today.rememberCurrentDateTime
 import java.time.LocalDate
 
@@ -235,8 +239,8 @@ fun CampusLifeApp(
                 plan = plan,
                 isDarkTheme = isDarkTheme,
                 onToggleTheme = onToggleTheme,
-                gacha = card.gachaEntry,
-                onGachaClick = card.onDraw,
+                stats = stats,
+                card = card,
                 modifier = contentModifier,
             )
             MainTab.Journal -> JournalScreen(
@@ -259,13 +263,6 @@ fun CampusLifeApp(
                 modifier = contentModifier,
                 onSelectDay = stats.onSelectDay,
                 onShowToday = stats.onShowToday,
-                onUseRestCard = checkIn.onUseRestCard,
-                onExchangeCards = card.onExchange,
-                showExchangeResult = card.justExchanged,
-                onDismissExchangeResult = card.onDismissExchange,
-                // 获得动效只在有"没看过的新卡"时播一次，收起后水位抬到当前张数。
-                showRestCardReveal = checkIn.shouldRevealRestCard,
-                onDismissRestCardReveal = checkIn.onDismissRestCardReveal,
             )
         }
         }
@@ -563,11 +560,34 @@ private fun TodayRoute(
     plan: DailyPlanController,
     isDarkTheme: Boolean,
     onToggleTheme: () -> Unit,
-    gacha: GachaEntryUiState,
-    onGachaClick: (CardSeries) -> Unit,
+    stats: StatsController,
+    card: CardController,
     modifier: Modifier = Modifier,
 ) {
     var showCloudBackup by rememberSaveable { mutableStateOf(false) }
+    var rewardPanel by rememberSaveable { mutableStateOf<TodayRewardPanel?>(null) }
+    val rewardActions: @Composable () -> Unit = {
+        TodayRewardButtons(stats.state, onOpen = { panel ->
+            rewardPanel = panel
+        })
+    }
+    rewardPanel?.let { panel ->
+        TodayRewardSheet(
+            panel = panel,
+            state = stats.state,
+            onDismiss = { rewardPanel = null },
+            dayDetails = stats.dayDetails,
+            onUseRestCard = checkIn.onUseRestCard,
+            onExchangeCards = card.onExchange,
+        )
+    }
+    if (checkIn.shouldRevealRestCard) RestCardReveal(onDismiss = checkIn.onDismissRestCardReveal)
+    if (card.justExchanged) {
+        CardExchangeResultDialog(
+            rewardRestCards = EXCHANGE_REWARD_REST_CARDS,
+            onDismiss = card.onDismissExchange,
+        )
+    }
 
     val cloudBackup = if (LocalInspectionMode.current) {
         null
@@ -633,8 +653,9 @@ private fun TodayRoute(
             isDarkTheme = isDarkTheme,
             isCloudBackupConnected = cloudBackup?.settings?.configured == true,
             onToggleTheme = onToggleTheme,
-            gachaState = gacha,
-            onGachaClick = onGachaClick,
+            gachaState = card.gachaEntry,
+            onGachaClick = card.onDraw,
+            rewardActions = rewardActions,
             onOpenDataBackup = {},
             // 首页不再显示「提醒」气泡（用户口径：正常时一个字都不说），
             // 预览里也就不再摆一句占位的话——设计稿上看到的应该是真实形态。
@@ -662,8 +683,9 @@ private fun TodayRoute(
         isDarkTheme = isDarkTheme,
         isCloudBackupConnected = cloudBackup?.settings?.configured == true,
         onToggleTheme = onToggleTheme,
-        gachaState = gacha,
-        onGachaClick = onGachaClick,
+        gachaState = card.gachaEntry,
+        onGachaClick = card.onDraw,
+        rewardActions = rewardActions,
         onTaskToggleTimer = plan.onToggleTaskTimer,
         onTaskFinish = plan.onFinishTask,
         onTaskAdd = plan.onAddTask,
